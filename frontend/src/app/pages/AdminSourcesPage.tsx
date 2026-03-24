@@ -1,0 +1,298 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Brain, Users, Database, Settings, AlertTriangle, CheckCircle } from 'lucide-react';
+
+interface ReviewSource {
+  id: string;
+  name: string;
+  url: string;
+  status: 'available' | 'unavailable';
+  lastChecked: string;
+  apiLimit: number;
+  apiUsed: number;
+  avgResponseTime: string;
+}
+
+const INITIAL_SOURCES: ReviewSource[] = [
+  {
+    id: '1',
+    name: 'Amazon',
+    url: 'https://api.amazon.com/reviews',
+    status: 'available',
+    lastChecked: '2026-02-07 14:30:00',
+    apiLimit: 1000,
+    apiUsed: 342,
+    avgResponseTime: '1.2s'
+  },
+  {
+    id: '2',
+    name: 'Yelp',
+    url: 'https://api.yelp.com/v3/businesses',
+    status: 'unavailable',
+    lastChecked: '2026-02-07 14:25:00',
+    apiLimit: 500,
+    apiUsed: 500,
+    avgResponseTime: 'N/A'
+  },
+  {
+    id: '3',
+    name: 'TripAdvisor',
+    url: 'https://api.tripadvisor.com/reviews',
+    status: 'available',
+    lastChecked: '2026-02-07 14:28:00',
+    apiLimit: 750,
+    apiUsed: 125,
+    avgResponseTime: '2.1s'
+  },
+  {
+    id: '4',
+    name: 'Google Reviews',
+    url: 'https://maps.googleapis.com/maps/api/place',
+    status: 'available',
+    lastChecked: '2026-02-07 14:29:00',
+    apiLimit: 2000,
+    apiUsed: 856,
+    avgResponseTime: '0.8s'
+  },
+  {
+    id: '5',
+    name: 'Trustpilot',
+    url: 'https://api.trustpilot.com/v1/reviews',
+    status: 'available',
+    lastChecked: '2026-02-07 14:27:00',
+    apiLimit: 1500,
+    apiUsed: 423,
+    avgResponseTime: '1.5s'
+  }
+];
+
+export function AdminSourcesPage() {
+  const navigate = useNavigate();
+  const [sources, setSources] = useState<ReviewSource[]>(INITIAL_SOURCES);
+  const [editingSource, setEditingSource] = useState<string | null>(null);
+  const [configData, setConfigData] = useState({
+    apiLimit: 0,
+    url: ''
+  });
+
+  const toggleStatus = (sourceId: string) => {
+    setSources(sources.map(s => 
+      s.id === sourceId 
+        ? { ...s, status: s.status === 'available' ? 'unavailable' : 'available' }
+        : s
+    ));
+  };
+
+  const handleEditConfig = (source: ReviewSource) => {
+    setEditingSource(source.id);
+    setConfigData({ apiLimit: source.apiLimit, url: source.url });
+  };
+
+  const handleSaveConfig = (sourceId: string) => {
+    setSources(sources.map(s => 
+      s.id === sourceId 
+        ? { ...s, apiLimit: configData.apiLimit, url: configData.url }
+        : s
+    ));
+    setEditingSource(null);
+  };
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'available') {
+      return (
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+          <CheckCircle className="w-3 h-3" />
+          Available
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+        <AlertTriangle className="w-3 h-3" />
+        Unavailable
+      </span>
+    );
+  };
+
+  const getUsageColor = (used: number, limit: number) => {
+    const percentage = (used / limit) * 100;
+    if (percentage >= 90) return 'text-red-600 dark:text-red-400';
+    if (percentage >= 70) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-green-600 dark:text-green-400';
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950 py-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-3 rounded-xl shadow-lg">
+              <Brain className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
+              <p className="text-gray-600 dark:text-gray-400">Manage Review Sources</p>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => navigate('/admin/logs')}
+              className="px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              System Logs
+            </button>
+            <button
+              onClick={() => navigate('/admin/users')}
+              className="px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+            >
+              <Users className="w-4 h-4" />
+              Manage Users
+            </button>
+            <button
+              onClick={() => navigate('/admin/sources')}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium shadow-md flex items-center gap-2"
+            >
+              <Database className="w-4 h-4" />
+              Review Sources
+            </button>
+          </div>
+        </div>
+
+        {/* Sources Grid */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {sources.map((source) => (
+            <div 
+              key={source.id} 
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                    {source.name}
+                  </h3>
+                  {getStatusBadge(source.status)}
+                </div>
+                <button
+                  onClick={() => handleEditConfig(source)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  title="Configure"
+                >
+                  <Settings className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+
+              {/* Configuration Form (if editing) */}
+              {editingSource === source.id ? (
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      API Endpoint
+                    </label>
+                    <input
+                      type="text"
+                      value={configData.url}
+                      onChange={(e) => setConfigData({ ...configData, url: e.target.value })}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      API Limit
+                    </label>
+                    <input
+                      type="number"
+                      value={configData.apiLimit}
+                      onChange={(e) => setConfigData({ ...configData, apiLimit: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSaveConfig(source.id)}
+                      className="flex-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingSource(null)}
+                      className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Info */}
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">API Endpoint</p>
+                      <p className="text-xs text-gray-700 dark:text-gray-300 font-mono break-all">
+                        {source.url}
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">API Usage</p>
+                        <p className={`text-sm font-semibold ${getUsageColor(source.apiUsed, source.apiLimit)}`}>
+                          {source.apiUsed} / {source.apiLimit}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Response</p>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {source.avgResponseTime}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Last Checked</p>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        {source.lastChecked}
+                      </p>
+                    </div>
+
+                    {/* Usage Bar */}
+                    <div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${
+                            (source.apiUsed / source.apiLimit) >= 0.9 ? 'bg-red-500' :
+                            (source.apiUsed / source.apiLimit) >= 0.7 ? 'bg-yellow-500' :
+                            'bg-green-500'
+                          }`}
+                          style={{ width: `${(source.apiUsed / source.apiLimit) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {Math.round((source.apiUsed / source.apiLimit) * 100)}% used
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Toggle Button */}
+              <button
+                onClick={() => toggleStatus(source.id)}
+                className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${
+                  source.status === 'available'
+                    ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/40'
+                    : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40'
+                }`}
+              >
+                Mark as {source.status === 'available' ? 'Unavailable' : 'Available'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
