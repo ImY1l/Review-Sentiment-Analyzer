@@ -10,7 +10,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -19,7 +19,7 @@ export function LoginPage() {
       return;
     }
 
-    const success = login(username, password);
+    const success = await login(username, password);
     if (success) {
       // Will be redirected by App component based on role
       navigate('/');
@@ -27,6 +27,7 @@ export function LoginPage() {
       setError('Invalid username or password');
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950 flex items-center justify-center px-4">

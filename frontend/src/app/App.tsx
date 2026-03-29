@@ -4,6 +4,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { CategorySelectionPage } from './pages/CategorySelectionPage';
 import { UserSearchPage } from './pages/UserSearchPage';
 import { UserResultsPage } from './pages/UserResultsPage';
 import { AdminLogsPage } from './pages/AdminLogsPage';
@@ -66,12 +67,17 @@ function AppContent() {
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={user ? (
-          user.role === 'admin' ? <Navigate to="/admin/logs" replace /> : <Navigate to="/search" replace />
+          user.role === 'admin' ? <Navigate to="/admin/logs" replace /> : <Navigate to="/categories" replace />
         ) : <LandingPage />} />
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
 
         {/* User Routes */}
+        <Route path="/categories" element={
+          <ProtectedRoute allowedRole="user">
+            <CategorySelectionPage />
+          </ProtectedRoute>
+        } />
         <Route path="/search" element={
           <ProtectedRoute allowedRole="user">
             <UserSearchPage />

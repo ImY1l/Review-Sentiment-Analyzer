@@ -5,8 +5,25 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 
 interface LocationState {
   query: string;
+  category?: string;
   platforms: string[];
 }
+
+const CATEGORY_NAMES: Record<string, string> = {
+  'tech': 'Tech & Electronics',
+  'food': 'Food & Dining',
+  'travel': 'Travel & Hotels',
+  'fashion': 'Fashion & Apparel',
+  'home': 'Home & Garden',
+  'beauty': 'Beauty & Personal Care',
+  'sports': 'Sports & Fitness',
+  'entertainment': 'Entertainment & Media',
+  'shopping': 'Shopping & Retail',
+  'health': 'Health & Medical',
+  'education': 'Education & Learning',
+  'automotive': 'Automotive',
+  'business': 'Business & Services',
+};
 
 // Mock data generator
 const generateMockData = (query: string) => {
@@ -140,6 +157,11 @@ export function UserResultsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Platforms: {state.platforms.join(', ')}
             </p>
+            {state.category && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Category: {CATEGORY_NAMES[state.category] || state.category}
+              </p>
+            )}
           </div>
         </div>
 

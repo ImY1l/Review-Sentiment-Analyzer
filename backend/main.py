@@ -1,0 +1,88 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+from bson import ObjectId
+from pydantic import BaseModel, EmailStr
+from passlib.context import CryptContext
+
+from app.database import (
+    users_collection,
+    products_collection,
+    platforms_collection,
+    reviews_collection,
+    analysis_collection,
+    configs_collection
+)
+
+app = FastAPI(title="Reviews Analyzer API", version="1.0.0")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
+    # Find user by username
+    user = users_collection.find_one({"username": request.username})
+    
+    if not user:
+        return {"success": False, "message": "Invalid credentials"}
+    
+    # Verify password
+    if not pwd_context.verify(request.password, user["password"]):
+        return {"success": False, "message": "Invalid credentials"}
+    
+    return {
+        "username": user["username"],
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"]
+    }
+
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    username: str
+    password: str
+
+@app.post("/api/auth/register")
+async def register(user_data: UserCreate):
+    # Check if user exists
+    existing = users_collection.find_one({"$or": [{"username": user_data.username}, {"email": user_data.email}]})
+    if existing:
+        return {"success": False, "message": "Username or email already exists"}
+
+    # Hash password
+    password_safe = user_data.password[:72] if len(user_data.password) > 72 else user_data.password
+    hashed_password = pwd_context.hash(password_safe)
+
+    # Create user
+    user = {
+        "name": user_data.name,
+        "email": user_data.email,
+        "username": user_data.username,
+        "password": hashed_password,
+        "role": "user",
+        "createdAt": datetime.utcnow()
+    }
+    
+    result = users_collection.insert_one(user)
+    return {"success": True, "message": "User created successfully"}
+
+@app.get("/")
+async def root():
+    return {"message": "Reviews Analyzer Backend API - Ready!"}
+
+# Other endpoints...
+

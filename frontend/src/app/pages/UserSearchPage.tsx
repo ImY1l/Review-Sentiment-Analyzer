@@ -1,22 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Search, Brain, Clock, Menu, X } from 'lucide-react';
+import { Search, Brain, Clock, Menu, X, ArrowLeft, Tag } from 'lucide-react';
 
 const PLATFORMS = [
   { id: 'amazon', name: 'Amazon', category: 'shopping' },
   { id: 'yelp', name: 'Yelp', category: 'restaurant' },
   { id: 'tripadvisor', name: 'TripAdvisor', category: 'travel' },
   { id: 'google', name: 'Google Reviews', category: 'general' },
+  { id: 'trustpilot', name: 'Trustpilot', category: 'general' },
 ];
+
+const CATEGORY_NAMES: Record<string, string> = {
+  'tech': 'Tech & Electronics',
+  'food': 'Food & Dining',
+  'travel': 'Travel & Hotels',
+  'fashion': 'Fashion & Apparel',
+  'home': 'Home & Garden',
+  'beauty': 'Beauty & Personal Care',
+  'sports': 'Sports & Fitness',
+  'entertainment': 'Entertainment & Media',
+  'shopping': 'Shopping & Retail',
+  'health': 'Health & Medical',
+  'education': 'Education & Learning',
+  'automotive': 'Automotive',
+  'business': 'Business & Services',
+};
 
 export function UserSearchPage() {
   const navigate = useNavigate();
-  const { user, searchHistory, addSearchHistory } = useApp();
+  const { user, searchHistory, addSearchHistory, currentCategory } = useApp();
   const [query, setQuery] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['amazon', 'google']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['amazon', 'google', 'trustpilot']);
   const [error, setError] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Redirect to category selection if no category is selected
+  useEffect(() => {
+    if (!currentCategory) {
+      navigate('/categories');
+    }
+  }, [currentCategory, navigate]);
+
+  if (!currentCategory) {
+    return null;
+  }
 
   const handlePlatformToggle = (platformId: string) => {
     setSelectedPlatforms(prev => 
@@ -55,8 +83,8 @@ export function UserSearchPage() {
     }
 
     // Add to search history and navigate to results
-    addSearchHistory(query, selectedPlatforms);
-    navigate('/results', { state: { query, platforms: selectedPlatforms } });
+    addSearchHistory(query, currentCategory || 'general', selectedPlatforms);
+    navigate('/results', { state: { query, category: currentCategory, platforms: selectedPlatforms } });
   };
 
   const handleHistoryClick = (historyItem: typeof searchHistory[0]) => {
@@ -67,7 +95,7 @@ export function UserSearchPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950">
-      <div className="flex flex-col lg:flex-row min-h-screen relative">
+      <div className="flex flex-col min-h-screen relative">
         {/* Sidebar Toggle Button */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -84,8 +112,8 @@ export function UserSearchPage() {
         {/* Sidebar - Search History */}
         <div 
           className={`
-            lg:w-80 bg-white dark:bg-gray-800 border-b lg:border-r border-gray-200 dark:border-gray-700 p-6
-            fixed lg:static top-0 left-0 h-full z-40 transition-transform duration-300 ease-in-out
+            w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-6
+            fixed top-0 left-0 h-full z-40 transition-transform duration-300 ease-in-out
             ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           `}
         >
@@ -113,6 +141,12 @@ export function UserSearchPage() {
                   onClick={() => handleHistoryClick(item)}
                   className="w-full text-left p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-600 transition-colors"
                 >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Tag className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+                      {CATEGORY_NAMES[item.category] || item.category}
+                    </span>
+                  </div>
                   <p className="font-medium text-gray-900 dark:text-white truncate">{item.query}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {item.platforms.join(', ')}
@@ -139,12 +173,12 @@ export function UserSearchPage() {
           <div className="max-w-4xl mx-auto">
             {/* Header */}
             <div className="text-center mb-12">
-              <div className="flex  flex-col items-center justify-center gap-3 mb-4">
+              <div className="flex items-center justify-center gap-3 mb-4">
                 <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-3 rounded-xl shadow-lg">
                   <Brain className="w-8 h-8 text-white" />
                 </div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  Review Sentiment Analyzer
+                  ReviewMind
                 </h1>
               </div>
               <p className="text-xl text-gray-700 dark:text-gray-300">
@@ -157,6 +191,26 @@ export function UserSearchPage() {
 
             {/* Search Bar */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 space-y-6">
+              {/* Category Badge with Back Button */}
+              {currentCategory && (
+                <div className="flex items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Category:</span>
+                    <span className="font-semibold text-purple-600 dark:text-purple-400">
+                      {CATEGORY_NAMES[currentCategory] || currentCategory}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => navigate('/categories')}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Change Category
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
                   What product would you like to analyze?

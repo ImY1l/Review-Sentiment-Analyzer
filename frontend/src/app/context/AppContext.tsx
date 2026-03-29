@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+
+
+
 interface User {
   username: string;
   name?: string;
@@ -10,6 +13,7 @@ interface User {
 interface SearchHistory {
   id: string;
   query: string;
+  category: string;
   platforms: string[];
   date: string;
 }
@@ -18,11 +22,13 @@ interface AppContextType {
   user: User | null;
   theme: 'light' | 'dark';
   searchHistory: SearchHistory[];
-  login: (username: string, password: string) => boolean;
+  currentCategory: string | null;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (data: { name: string; email: string; username: string; password: string }) => boolean;
+  register: (data: { name: string; email: string; username: string; password: string }) => Promise<boolean>;
   toggleTheme: () => void;
-  addSearchHistory: (query: string, platforms: string[]) => void;
+  addSearchHistory: (query: string, category: string, platforms: string[]) => void;
+  setCategory: (category: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -37,53 +43,92 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
+  const [currentCategory, setCurrentCategory] = useState<string | null>(null);
 
   useEffect(() => {
     // Apply theme to document
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  const login = (username: string, password: string): boolean => {
-    // Check admin
-    if (username === MOCK_ADMIN.username && password === MOCK_ADMIN.password) {
-      setUser({ username, role: 'admin' });
-      return true;
-    }
+  const login = async (username: string, password: string): Promise<boolean> => {
+    const url = 'http://localhost:8000/api/auth/login';
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    // Check users
-    const foundUser = MOCK_USERS.find(u => u.username === username && u.password === password);
-    if (foundUser) {
-      setUser({ username, name: foundUser.name, email: foundUser.email, role: 'user' });
-      return true;
-    }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+        signal: controller.signal,
+      });
 
-    return false;
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      setUser({
+        username: result.username,
+        name: result.name,
+        email: result.email,
+        role: result.role
+      });
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
   };
+
 
   const logout = () => {
     setUser(null);
     setSearchHistory([]);
   };
 
-  const register = (data: { name: string; email: string; username: string; password: string }): boolean => {
-    // Check if username already exists
-    if (MOCK_USERS.find(u => u.username === data.username) || data.username === MOCK_ADMIN.username) {
+  const register = async (data: { name: string; email: string; username: string; password: string }): Promise<boolean> => {
+    const url = 'http://localhost:8000/api/auth/register';
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error('Registration failed:', error);
       return false;
     }
-
-    // Add to mock database
-    MOCK_USERS.push({ ...data, role: 'user' });
-    return true;
   };
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  const addSearchHistory = (query: string, platforms: string[]) => {
+  const addSearchHistory = (query: string, category: string, platforms: string[]) => {
     const newSearch: SearchHistory = {
       id: Date.now().toString(),
       query,
+      category,
       platforms,
       date: new Date().toISOString()
     };
@@ -91,8 +136,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSearchHistory(prev => [newSearch, ...prev].slice(0, 3)); // Keep only last 3
   };
 
+  const setCategory = (category: string) => {
+    setCurrentCategory(category);
+  };
+
   return (
-    <AppContext.Provider value={{ user, theme, searchHistory, login, logout, register, toggleTheme, addSearchHistory }}>
+    <AppContext.Provider value={{ user, theme, searchHistory, currentCategory, login, logout, register, toggleTheme, addSearchHistory, setCategory }}>
       {children}
     </AppContext.Provider>
   );

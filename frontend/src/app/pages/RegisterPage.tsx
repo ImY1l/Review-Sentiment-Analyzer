@@ -32,7 +32,7 @@ export function RegisterPage() {
     setError('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -52,7 +52,7 @@ export function RegisterPage() {
       return;
     }
 
-    const success = register({
+    const success = await register({
       name: formData.name,
       email: formData.email,
       username: formData.username,
