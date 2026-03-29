@@ -1,3 +1,5 @@
-# Ignore environment files
+# Ignore all env files everywhere
 .env
 .env.*
+**/.env
+**/.env.*
