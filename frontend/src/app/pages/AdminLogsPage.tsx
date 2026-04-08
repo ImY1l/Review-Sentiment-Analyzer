@@ -30,7 +30,7 @@ const MOCK_LOGS: LogEntry[] = [
     timestamp: '2026-02-07 14:10:33',
     level: 'success',
     message: 'Successfully processed 1,250 reviews',
-    details: 'Product: iPhone 15 Pro, Platforms: Amazon, Google Reviews'
+    details: 'Product: iPhone 15, Platforms: Amazon, Google Reviews'
   },
   {
     id: '4',

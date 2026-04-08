@@ -65,7 +65,7 @@ export function CategorySelectionPage() {
               <Brain className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              ReviewMind
+              Review Sentiment Analyzer
             </h1>
           </div>
           <p className="text-xl text-gray-700 dark:text-gray-300">
