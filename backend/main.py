@@ -84,5 +84,24 @@ async def register(user_data: UserCreate):
 async def root():
     return {"message": "Reviews Analyzer Backend API - Ready!"}
 
+from pydantic import BaseModel
+import asyncio
+from app.scrapers.lazada_scraper import scrape_lazada
+
+class ScrapeRequest(BaseModel):
+    query: str
+    user_id: str
+
+@app.post("/api/scrapers/lazada")
+async def scrape_lazada_api(request: ScrapeRequest):
+    """
+    Scrape Lazada reviews for product query.
+    """
+    try:
+        result = await scrape_lazada(request.query, request.user_id)
+        return result
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 # Other endpoints...
 
