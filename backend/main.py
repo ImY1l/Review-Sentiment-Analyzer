@@ -1,9 +1,15 @@
-from fastapi import FastAPI
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    pass
+from fastapi import FastAPI, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from bson import ObjectId
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
+from app.services.ai_service import analyze_reviews
 
 from app.database import (
     users_collection,
@@ -97,11 +103,31 @@ async def scrape_lazada_api(request: ScrapeRequest):
     """
     Scrape Lazada reviews for product query.
     """
+    from app.scrapers.lazada_scraper import scrape_lazada
     try:
-        result = await scrape_lazada(request.query, request.user_id)
-        return result
+      return await scrape_lazada(request.query, request.user_id)
     except Exception as e:
-        return {"success": False, "message": str(e)}
+      return {"success": False, "product_id": None, "message": str(e)}
 
-# Other endpoints...
 
+# AI Analysis endpoints
+@app.post("/api/analyze/{product_id}")
+async def api_analyze(product_id: str):
+    user_id = "anonymous"
+    """Trigger AI analysis for scraped reviews"""
+    result = analyze_reviews(product_id, user_id)
+    if result is None:
+        return {"success": False, "message": "No reviews found or analysis failed"}
+    return result
+
+@app.get("/api/results/{product_id}")
+async def api_results(product_id: str):
+    """Get latest analysis report for product"""
+    report = analysis_collection.find_one(
+        {"product_id": product_id},
+        sort=[("created_at", -1)]
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="No analysis found")
+    report["_id"] = str(report["_id"])
+    return report

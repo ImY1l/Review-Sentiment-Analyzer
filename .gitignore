@@ -3,3 +3,8 @@
 .env.*
 **/.env
 **/.env.*
+
+# Ignore node modules & virtual environments
+/node_modules
+/venv
+/.venv

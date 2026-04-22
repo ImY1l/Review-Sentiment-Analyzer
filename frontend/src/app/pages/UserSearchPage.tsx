@@ -4,12 +4,12 @@ import { useApp } from '../context/AppContext';
 import { Search, Brain, Clock, Menu, X, ArrowLeft, Tag } from 'lucide-react';
 
 const PLATFORMS = [
+  { id: 'lazada', name: 'Lazada', category: 'shopping' },
+  { id: 'shopee', name: 'Shopee', category: 'shopping' },
   { id: 'amazon', name: 'Amazon', category: 'shopping' },
-  { id: 'yelp', name: 'Yelp', category: 'restaurant' },
-  { id: 'tripadvisor', name: 'TripAdvisor', category: 'travel' },
   { id: 'google', name: 'Google Reviews', category: 'general' },
-  { id: 'trustpilot', name: 'Trustpilot', category: 'general' },
 ];
+
 
 const CATEGORY_NAMES: Record<string, string> = {
   'tech': 'Tech & Electronics',
@@ -29,11 +29,12 @@ const CATEGORY_NAMES: Record<string, string> = {
 
 export function UserSearchPage() {
   const navigate = useNavigate();
-  const { user, searchHistory, addSearchHistory, currentCategory } = useApp();
+const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProductId } = useApp();
   const [query, setQuery] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['amazon', 'google', 'trustpilot']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['lazada']);
   const [error, setError] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Redirect to category selection if no category is selected
   useEffect(() => {
@@ -54,7 +55,9 @@ export function UserSearchPage() {
     );
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
+    if (isSearching) return;
+
     setError('');
 
     if (!query.trim()) {
@@ -62,29 +65,66 @@ export function UserSearchPage() {
       return;
     }
 
-    if (selectedPlatforms.length === 0) {
-      setError('Please select at least one review platform');
-      return;
+    setIsSearching(true);
+
+    try {
+      const userId = user?.username || 'anonymous';
+
+      // Step 1: Scrape Lazada (only platform per task)
+      console.log('Starting Lazada scrape for:', query);
+      const scrapeResponse = await fetch('http://localhost:8000/api/scrapers/lazada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim(), user_id: userId }),
+        signal: AbortSignal.timeout(120000) // 2min timeout for scraping
+      });
+
+      if (!scrapeResponse.ok) {
+        const err = await scrapeResponse.json();
+        throw new Error(err.message || `Scrape failed: ${scrapeResponse.status}`);
+      }
+
+      const scrapeData = await scrapeResponse.json();
+      
+      if (!scrapeData.success || !scrapeData.product_id) {
+        throw new Error(scrapeData.message || 'Scraping failed - no product found');
+      }
+      
+      const productId = scrapeData.product_id;
+
+      console.log('Scrape response:', scrapeData);
+      console.log('Using productId:', productId);
+
+      // Set context early
+      setCurrentProductId(productId);
+      addSearchHistory(query, currentCategory || 'general', ['lazada']);
+
+      // Step 2: Analyze with AI
+      console.log('Starting AI analysis...');
+      const analyzeResponse = await fetch(`http://localhost:8000/api/analyze/${productId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userId),
+        // signal: AbortSignal.timeout(60000) // removed for long AI
+      });
+
+      if (!analyzeResponse.ok) {
+        const err = await analyzeResponse.json();
+        throw new Error(err.detail || `Analysis failed: ${analyzeResponse.status}`);
+      }
+
+      const analysisData = await analyzeResponse.json();
+      console.log('Analysis complete');
+
+      // Navigate to results (context/history already set)
+      navigate(`/results?productId=${productId}`);
+
+    } catch (err: any) {
+      console.error('Search failed:', err);
+      setError(err.message || 'Search failed. Please try again.');
+    } finally {
+      setIsSearching(false);
     }
-
-    // Mock search logic
-    const lowerQuery = query.toLowerCase().trim();
-
-    // Case 1: Too ambiguous (just "iphone")
-    if (lowerQuery === 'iphone') {
-      setError('Your search is too ambiguous. Please specify a model (e.g., "iPhone 15")');
-      return;
-    }
-
-    // Case 2: Product with incompatible platforms
-    if (lowerQuery.includes('iphone') && selectedPlatforms.includes('yelp') && selectedPlatforms.length === 1) {
-      setError('No reviews found on the selected platforms. Try selecting different platforms.');
-      return;
-    }
-
-    // Add to search history and navigate to results
-    addSearchHistory(query, currentCategory || 'general', selectedPlatforms);
-    navigate('/results', { state: { query, category: currentCategory, platforms: selectedPlatforms } });
   };
 
   const handleHistoryClick = (historyItem: typeof searchHistory[0]) => {
@@ -160,6 +200,24 @@ export function UserSearchPage() {
           )}
         </div>
 
+        {/* Loading Overlay */}
+        {isSearching && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border border-gray-200 dark:border-gray-700">
+              <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 flex items-center justify-center animate-spin">
+                <Brain className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Analyzing Reviews</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">Scraping and processing (2-5 minutes)</p>
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}} />
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}} />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Overlay for mobile/tablet */}
         {isSidebarOpen && (
           <div 
@@ -169,7 +227,7 @@ export function UserSearchPage() {
         )}
 
         {/* Main Content */}
-        <div className="flex-1 p-6 lg:p-12">
+        <div className={`flex-1 p-6 lg:p-12 ${isSearching ? 'opacity-50 pointer-events-none' : ''}`}>
           <div className="max-w-4xl mx-auto">
             {/* Header */}
             <div className="text-center mb-12">
@@ -228,10 +286,11 @@ export function UserSearchPage() {
                 </div>
               </div>
 
+
               {/* Platform Selection */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
-                  Select review platforms to scrape
+                  Select review platforms (Lazada primary)
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {PLATFORMS.map((platform) => (
@@ -251,6 +310,7 @@ export function UserSearchPage() {
                 </div>
               </div>
 
+
               {/* Error Message */}
               {error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400">
@@ -261,10 +321,20 @@ export function UserSearchPage() {
               {/* Search Button */}
               <button
                 onClick={handleSearch}
-                className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 font-semibold text-lg flex items-center justify-center gap-2"
+                disabled={isSearching}
+                className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 font-semibold text-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:scale-100"
               >
-                <Search className="w-5 h-5" />
-                Analyze Reviews
+                {isSearching ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Analyzing Reviews...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-5 h-5" />
+                    Analyze Reviews
+                  </>
+                )}
               </button>
             </div>
           </div>

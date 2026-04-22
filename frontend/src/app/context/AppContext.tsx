@@ -1,8 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-
-
-
 interface User {
   username: string;
   name?: string;
@@ -23,12 +20,14 @@ interface AppContextType {
   theme: 'light' | 'dark';
   searchHistory: SearchHistory[];
   currentCategory: string | null;
+  currentProductId: string | null;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   register: (data: { name: string; email: string; username: string; password: string }) => Promise<boolean>;
   toggleTheme: () => void;
   addSearchHistory: (query: string, category: string, platforms: string[]) => void;
   setCategory: (category: string) => void;
+  setCurrentProductId: (productId: string | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -43,7 +42,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
-  const [currentCategory, setCurrentCategory] = useState<string | null>(null);
+const [currentCategory, setCurrentCategory] = useState<string | null>(null);
+  const [currentProductId, setCurrentProductId] = useState<string | null>(null);
 
   useEffect(() => {
     // Apply theme to document
@@ -136,12 +136,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSearchHistory(prev => [newSearch, ...prev].slice(0, 3)); // Keep only last 3
   };
 
-  const setCategory = (category: string) => {
+const setCategory = (category: string) => {
     setCurrentCategory(category);
   };
 
+  const setCurrentProductIdLocal = (productId: string | null) => {
+    setCurrentProductId(productId);
+  };
+
   return (
-    <AppContext.Provider value={{ user, theme, searchHistory, currentCategory, login, logout, register, toggleTheme, addSearchHistory, setCategory }}>
+    <AppContext.Provider value={{ user, theme, searchHistory, currentCategory, currentProductId, login, logout, register, toggleTheme, addSearchHistory, setCategory, setCurrentProductId: setCurrentProductIdLocal }}>
       {children}
     </AppContext.Provider>
   );

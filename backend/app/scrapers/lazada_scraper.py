@@ -17,7 +17,7 @@ async def scrape_lazada(product_query: str, user_id: str, max_pages: int = 10) -
 
     reviews = []
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             viewport={'width': 1366, 'height': 768},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -47,7 +47,7 @@ async def scrape_lazada(product_query: str, user_id: str, max_pages: int = 10) -
                     break
 
             if not product_url:
-                return {'success': False, 'reviews_count': 0, 'message': 'No product link found'}
+                return {'success': False, 'product_id': product_id, 'reviews_count': 0, 'message': 'No product link found'}
 
             print(f"Product URL: {product_url}")
             products_collection.update_one({'product_id': product_id}, {'$set': {'url': product_url}})
@@ -207,6 +207,7 @@ async def scrape_lazada(product_query: str, user_id: str, max_pages: int = 10) -
             await browser.close()
             return {
                 'success': True,
+                'product_id': product_id,
                 'reviews_count': len(reviews),
                 'message': f'Scraped {len(reviews)} reviews across {page_num} pages'
             }
@@ -214,7 +215,7 @@ async def scrape_lazada(product_query: str, user_id: str, max_pages: int = 10) -
         except Exception as e:
             print(f"Error: {str(e)}")
             await browser.close()
-            return {'success': False, 'reviews_count': 0, 'message': str(e)}
+            return {'success': False, 'product_id': product_id, 'reviews_count': 0, 'message': str(e)}
 
 
 if __name__ == "__main__":
