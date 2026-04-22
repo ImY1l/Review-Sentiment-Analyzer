@@ -34,12 +34,16 @@ cd Review-Sentiment-Analyzer
 cd backend
 uvicorn main:app
 ```
-3. Run Frontend
+3. Install Dependencies
+```bash
+npm install
+```
+4. Run Frontend
 ```bash
 cd frontend
 npm run dev
 ```
-4. Access the App
+5. Access the App
 ```bash
 Browse to http://127.0.0.1:8000
 ```
