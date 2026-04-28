@@ -125,8 +125,29 @@ export interface AnalysisResult {
 }
 
 /**
- * Search and analyze reviews
- * FastAPI endpoint: POST /api/reviews/analyze
+ * Unified search: scrape selected platforms + analyze
+ * FastAPI endpoint: POST /api/search
+ */
+export async function unifiedSearch(data: {
+  query: string;
+  user_id: string;
+  platforms: string[];
+}): Promise<{
+  success: boolean;
+  product_id?: string;
+  product_ids?: string[];
+  platforms?: string[];
+  analysis?: any;
+  message?: string;
+}> {
+  return apiRequest('/api/search', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Legacy analyzeReviews (kept for compatibility)
  */
 export async function analyzeReviews(data: SearchRequest): Promise<AnalysisResult> {
   return apiRequest<AnalysisResult>('/api/reviews/analyze', {
@@ -135,15 +156,8 @@ export async function analyzeReviews(data: SearchRequest): Promise<AnalysisResul
   });
 }
 
-/**
- * Validate search query before analysis
- * FastAPI endpoint: POST /api/reviews/validate
- */
 export async function validateSearch(data: SearchRequest): Promise<{ valid: boolean; message?: string }> {
-  return apiRequest('/api/reviews/validate', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+  return { valid: true };
 }
 
 // ============================================================================

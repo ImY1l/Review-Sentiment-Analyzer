@@ -33,7 +33,8 @@ export function UserResultsPage() {
   const { currentProductId, currentCategory } = useApp();
   
   const productId = searchParams.get('productId') || currentProductId;
-  const queryFromUrl = searchParams.get('query') || ''; // Fallback
+  const queryFromUrl = searchParams.get('query') || '';
+  const platformsFromUrl = searchParams.get('platforms')?.split(',') || ['lazada'];
 
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -225,7 +226,7 @@ export function UserResultsPage() {
               Product ID: <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">{productId}</span>
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Platforms: Lazada
+              Platforms: {platformsFromUrl.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
             </p>
             {currentCategory && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">

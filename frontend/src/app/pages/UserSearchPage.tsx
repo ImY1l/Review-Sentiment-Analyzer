@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Search, Brain, Clock, Menu, X, ArrowLeft, Tag } from 'lucide-react';
+import { unifiedSearch } from '../services/api';
 
 const PLATFORMS = [
   { id: 'lazada', name: 'Lazada', category: 'shopping' },
@@ -65,59 +66,46 @@ const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProduc
       return;
     }
 
+    if (selectedPlatforms.length === 0) {
+      setError('Please select at least one review platform');
+      return;
+    }
+
     setIsSearching(true);
 
     try {
       const userId = user?.username || 'anonymous';
 
-      // Step 1: Scrape Lazada (only platform per task)
-      console.log('Starting Lazada scrape for:', query);
-      const scrapeResponse = await fetch('http://localhost:8000/api/scrapers/lazada', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim(), user_id: userId }),
-        signal: AbortSignal.timeout(120000) // 2min timeout for scraping
+      // Filter only supported platforms (lazada, amazon)
+      const supportedPlatforms = selectedPlatforms.filter(
+        p => p === 'lazada' || p === 'amazon'
+      );
+
+      if (supportedPlatforms.length === 0) {
+        throw new Error('No supported platforms selected. Please choose Lazada or Amazon.');
+      }
+
+      console.log('Starting unified search for:', query, 'on platforms:', supportedPlatforms);
+
+      // Unified search: scrape + analyze in one call
+      const result = await unifiedSearch({
+        query: query.trim(),
+        user_id: userId,
+        platforms: supportedPlatforms,
       });
 
-      if (!scrapeResponse.ok) {
-        const err = await scrapeResponse.json();
-        throw new Error(err.message || `Scrape failed: ${scrapeResponse.status}`);
+      if (!result.success || !result.product_id) {
+        throw new Error(result.message || 'Search failed - no product found');
       }
 
-      const scrapeData = await scrapeResponse.json();
-      
-      if (!scrapeData.success || !scrapeData.product_id) {
-        throw new Error(scrapeData.message || 'Scraping failed - no product found');
-      }
-      
-      const productId = scrapeData.product_id;
+      console.log('Unified search result:', result);
 
-      console.log('Scrape response:', scrapeData);
-      console.log('Using productId:', productId);
+      // Set context and history
+      setCurrentProductId(result.product_id);
+      addSearchHistory(query, currentCategory || 'general', supportedPlatforms);
 
-      // Set context early
-      setCurrentProductId(productId);
-      addSearchHistory(query, currentCategory || 'general', ['lazada']);
-
-      // Step 2: Analyze with AI
-      console.log('Starting AI analysis...');
-      const analyzeResponse = await fetch(`http://localhost:8000/api/analyze/${productId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userId),
-        // signal: AbortSignal.timeout(60000) // removed for long AI
-      });
-
-      if (!analyzeResponse.ok) {
-        const err = await analyzeResponse.json();
-        throw new Error(err.detail || `Analysis failed: ${analyzeResponse.status}`);
-      }
-
-      const analysisData = await analyzeResponse.json();
-      console.log('Analysis complete');
-
-      // Navigate to results (context/history already set)
-      navigate(`/results?productId=${productId}`);
+      // Navigate to results
+      navigate(`/results?productId=${result.product_id}&platforms=${supportedPlatforms.join(',')}&query=${encodeURIComponent(query.trim())}`);
 
     } catch (err: any) {
       console.error('Search failed:', err);
@@ -208,7 +196,10 @@ const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProduc
                 <Brain className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Analyzing Reviews</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">Scraping and processing (2-5 minutes)</p>
+              <p className="text-gray-600 dark:text-gray-400 mb-2">
+                Scraping from: <span className="font-semibold text-purple-600 dark:text-purple-400">{selectedPlatforms.filter(p => p === 'lazada' || p === 'amazon').join(', ')}</span>
+              </p>
+              <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">This may take 2-5 minutes</p>
               <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" />
                 <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}} />
@@ -290,7 +281,7 @@ const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProduc
               {/* Platform Selection */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
-                  Select review platforms (Lazada primary)
+                  Select review platforms
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {PLATFORMS.map((platform) => (

@@ -1,7 +1,7 @@
 from google import genai
 import os
 from dotenv import load_dotenv
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from pydantic import ValidationError
 from app.database import reviews_collection, products_collection, analysis_collection
 from app.models.analysis import AnalysisReport, SentimentData, RatingData, TrendData
@@ -15,17 +15,21 @@ load_dotenv()
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 
-def analyze_reviews(product_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+def analyze_reviews(product_ids: Union[str, List[str]], user_id: str) -> Optional[Dict[str, Any]]:
     """
     Analyze scraped reviews for a product using Gemini AI.
+    Accepts single product_id or list of product_ids for multi-platform analysis.
     Returns structured data matching frontend expectations.
     """
+    if isinstance(product_ids, str):
+        product_ids = [product_ids]
+    
     # Fetch reviews and product info
-    reviews = list(reviews_collection.find({"product_id": product_id}).limit(100))  # Sample max 100
+    reviews = list(reviews_collection.find({"product_id": {"$in": product_ids}}).limit(100))  # Sample max 100
     if not reviews:
         return None
     
-    product = products_collection.find_one({"product_id": product_id})
+    product = products_collection.find_one({"product_id": product_ids[0]})
     platforms = list(set(r.get("platform", "unknown") for r in reviews))
     
     # Prepare reviews text for prompt
@@ -75,7 +79,7 @@ Be specific, use actual review data/themes. Percentages must sum ~100%. Ratings 
         # Create full report
         report = AnalysisReport(
             id=str(uuid.uuid4()),
-            product_id=product_id,
+            product_id=product_ids[0],
             user_id=user_id,
             summary=analysis_data["summary"],
             pros=analysis_data["pros"],

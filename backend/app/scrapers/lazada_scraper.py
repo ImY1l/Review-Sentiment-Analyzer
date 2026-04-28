@@ -17,7 +17,7 @@ async def scrape_lazada(product_query: str, user_id: str, max_pages: int = 10) -
 
     reviews = []
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context(
             viewport={'width': 1366, 'height': 768},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'

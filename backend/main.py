@@ -90,9 +90,11 @@ async def register(user_data: UserCreate):
 async def root():
     return {"message": "Reviews Analyzer Backend API - Ready!"}
 
+from typing import List
 from pydantic import BaseModel
 import asyncio
 from app.scrapers.lazada_scraper import scrape_lazada
+from app.scrapers.amazon_scraper import scrape_amazon
 
 class ScrapeRequest(BaseModel):
     query: str
@@ -109,6 +111,58 @@ async def scrape_lazada_api(request: ScrapeRequest):
     except Exception as e:
       return {"success": False, "product_id": None, "message": str(e)}
 
+@app.post("/api/scrapers/amazon")
+async def scrape_amazon_api(request: ScrapeRequest):
+    """
+    Scrape Amazon reviews for product query.
+    """
+    from app.scrapers.amazon_scraper import scrape_amazon
+    try:
+      return await scrape_amazon(request.query, request.user_id)
+    except Exception as e:
+      return {"success": False, "product_id": None, "message": str(e)}
+
+class SearchRequest(BaseModel):
+    query: str
+    user_id: str
+    platforms: List[str] = ["lazada"]
+
+@app.post("/api/search")
+async def unified_search(request: SearchRequest):
+    """
+    Unified search: scrape selected platforms concurrently,
+    aggregate reviews, analyze with AI, return results.
+    """
+    product_ids = []
+    platforms_scraped = []
+
+    for platform in request.platforms:
+        if platform.lower() == 'lazada':
+            result = await scrape_lazada(request.query, request.user_id)
+            if result.get('success') and result.get('product_id'):
+                product_ids.append(result['product_id'])
+                platforms_scraped.append('lazada')
+        elif platform.lower() == 'amazon':
+            result = await scrape_amazon(request.query, request.user_id)
+            if result.get('success') and result.get('product_id'):
+                product_ids.append(result['product_id'])
+                platforms_scraped.append('amazon')
+
+    if not product_ids:
+        return {"success": False, "message": "No products scraped from any platform"}
+
+    # Analyze all reviews together (multi-platform)
+    analysis = analyze_reviews(product_ids, request.user_id)
+    if not analysis:
+        return {"success": False, "message": "Analysis failed"}
+
+    return {
+        "success": True,
+        "product_id": product_ids[0],
+        "product_ids": product_ids,
+        "platforms": platforms_scraped,
+        "analysis": analysis
+    }
 
 # AI Analysis endpoints
 @app.post("/api/analyze/{product_id}")
