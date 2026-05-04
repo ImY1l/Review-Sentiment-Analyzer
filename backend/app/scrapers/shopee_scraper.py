@@ -1,33 +1,35 @@
-# from playwright.async_api import async_playwright
-# from app.database import reviews_collection, products_collection
-# from datetime import datetime
-# import asyncio
-# import uuid
-# import os
+from playwright.async_api import async_playwright
+from app.database import reviews_collection, products_collection
+from datetime import datetime
+import asyncio
+import uuid
+import os
 
-# async def scrape_shopee(product_query: str, user_id: str, max_pages: int = 10) -> dict:
-#     product_id = str(uuid.uuid4())
-#     product_doc = {
-#         'product_id': product_id,
-#         'platform': 'shopee',
-#         'query': product_query,
-#         'user_id': user_id,
-#         'scraped_at': datetime.utcnow()
-#     }
-#     products_collection.insert_one(product_doc)
+async def scrape_shopee(product_query: str, user_id: str, max_pages: int = 10) -> dict:
+    product_id = str(uuid.uuid4())
+    product_doc = {
+        'product_id': product_id,
+        'platform': 'shopee',
+        'query': product_query,
+        'user_id': user_id,
+        'scraped_at': datetime.utcnow()
+    }
+    products_collection.insert_one(product_doc)
 
-#     reviews = []
-#     tmp_dir = 'backend/tmp_shopee'
-#     os.makedirs(tmp_dir, exist_ok=True)
+    reviews = []
 
-#     async with async_playwright() as p:
-#         context = await p.chromium.launch_persistent_context(
-#             user_data_dir=os.path.abspath(tmp_dir),
-#             headless=False,
-#             viewport={'width': 1366, 'height': 768},
-#             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-#         )
-#         page = await context.new_page()
+    tmp_dir = 'backend/tmp_shopee'
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    async with async_playwright() as p:
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=os.path.abspath(tmp_dir),
+            headless=False,
+            viewport={'width': 1366, 'height': 768},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        )
+        page = await context.new_page()
+
 
 #         try:
 #             # 1. Go to Shopee

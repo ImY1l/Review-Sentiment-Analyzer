@@ -5,37 +5,41 @@ import { Search, Brain, Clock, Menu, X, ArrowLeft, Tag } from 'lucide-react';
 import { unifiedSearch } from '../services/api';
 
 const PLATFORMS = [
-  { id: 'lazada', name: 'Lazada', category: 'shopping' },
-  { id: 'shopee', name: 'Shopee', category: 'shopping' },
-  { id: 'amazon', name: 'Amazon', category: 'shopping' },
-  { id: 'google', name: 'Google Reviews', category: 'general' },
+  { id: 'lazada', name: 'Lazada', category: 'ecommerce' },
+  { id: 'shopee', name: 'Shopee', category: 'ecommerce' },
+  { id: 'amazon', name: 'Amazon', category: 'ecommerce' },
+  { id: 'google_maps', name: 'Google Maps', category: 'locations' },
+  { id: 'google_product', name: 'Google Reviews', category: 'locations' },
+  { id: 'yelp', name: 'Yelp', category: 'food' },
+  { id: 'tripadvisor', name: 'Tripadvisor', category: 'food' },
 ];
 
 
+
 const CATEGORY_NAMES: Record<string, string> = {
-  'tech': 'Tech & Electronics',
-  'food': 'Food & Dining',
-  'travel': 'Travel & Hotels',
-  'fashion': 'Fashion & Apparel',
-  'home': 'Home & Garden',
-  'beauty': 'Beauty & Personal Care',
-  'sports': 'Sports & Fitness',
-  'entertainment': 'Entertainment & Media',
-  'shopping': 'Shopping & Retail',
-  'health': 'Health & Medical',
-  'education': 'Education & Learning',
-  'automotive': 'Automotive',
-  'business': 'Business & Services',
+  'ecommerce': 'E-commerce',
+  'food': 'Food & dining',
+  'locations': 'Locations',
 };
+
 
 export function UserSearchPage() {
   const navigate = useNavigate();
-const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProductId } = useApp();
+  const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProductId } = useApp();
   const [query, setQuery] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['lazada']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+
   const [error, setError] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+
+  const platformMap: Record<string, string[]> = {
+    'ecommerce': ['shopee', 'lazada', 'amazon', 'google_product'],
+    'food': ['yelp', 'tripadvisor', 'google_maps'],
+    'locations': ['google_maps', 'yelp', 'tripadvisor']
+  };
+  const categoryPlatforms = platformMap[currentCategory || 'ecommerce'] || [];
+
 
   // Redirect to category selection if no category is selected
   useEffect(() => {
@@ -76,14 +80,30 @@ const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProduc
     try {
       const userId = user?.username || 'anonymous';
 
-      // Filter only supported platforms (lazada, amazon)
-      const supportedPlatforms = selectedPlatforms.filter(
-        p => p === 'lazada' || p === 'amazon'
-      );
 
-      if (supportedPlatforms.length === 0) {
-        throw new Error('No supported platforms selected. Please choose Lazada or Amazon.');
-      }
+
+// Filter platforms STRICTLY by category
+const platformMap: Record<string, string[]> = {
+  'ecommerce': ['shopee', 'lazada', 'amazon', 'google_product'],
+  'food': ['yelp', 'tripadvisor', 'google_maps'],
+  'locations': ['google_maps', 'yelp', 'tripadvisor']
+};
+const categoryPlatforms: string[] = platformMap[currentCategory || 'ecommerce'] || [];
+
+
+
+
+
+const selectedSupported = selectedPlatforms.filter(p => categoryPlatforms.includes(p));
+
+
+if (selectedSupported.length === 0) {
+  throw new Error(`No platforms available for ${CATEGORY_NAMES[currentCategory] || currentCategory}`);
+}
+
+const supportedPlatforms = selectedSupported;
+
+
 
       console.log('Starting unified search for:', query, 'on platforms:', supportedPlatforms);
 
@@ -196,8 +216,9 @@ const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProduc
                 <Brain className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Analyzing Reviews</h3>
+
               <p className="text-gray-600 dark:text-gray-400 mb-2">
-                Scraping from: <span className="font-semibold text-purple-600 dark:text-purple-400">{selectedPlatforms.filter(p => p === 'lazada' || p === 'amazon').join(', ')}</span>
+                Scraping from: <span className="font-semibold text-purple-600 dark:text-purple-400">{selectedPlatforms.join(', ')}</span>
               </p>
               <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">This may take 2-5 minutes</p>
               <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -284,22 +305,31 @@ const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProduc
                   Select review platforms
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {PLATFORMS.map((platform) => (
-                    <label
-                      key={platform.id}
-                      className="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600 cursor-pointer transition-colors bg-gray-50 dark:bg-gray-700/50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedPlatforms.includes(platform.id)}
-                        onChange={() => handlePlatformToggle(platform.id)}
-                        className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                      />
-                      <span className="text-gray-900 dark:text-white font-medium">{platform.name}</span>
-                    </label>
-                  ))}
+                  {categoryPlatforms.map((platformId: string) => {
+                    const platform = PLATFORMS.find(p => p.id === platformId);
+                    if (!platform) return null;
+                    
+                    return (
+                      <label
+                        key={platform.id}
+                        className="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600 cursor-pointer transition-colors bg-gray-50 dark:bg-gray-700/50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPlatforms.includes(platform.id)}
+                          onChange={() => handlePlatformToggle(platform.id)}
+                          className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="text-gray-900 dark:text-white font-medium">{platform.name}</span>
+                      </label>
+                    );
+                  })}
+
+
                 </div>
+
               </div>
+
 
 
               {/* Error Message */}

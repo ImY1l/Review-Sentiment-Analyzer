@@ -3,36 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { 
   Brain, 
-  Smartphone, 
-  UtensilsCrossed, 
-  Plane, 
-  Shirt, 
-  Home, 
-  Sparkles, 
-  Dumbbell,
-  Tv,
   ShoppingBag,
-  Stethoscope,
-  GraduationCap,
-  Car,
-  Briefcase
+  UtensilsCrossed, 
+  MapPin 
 } from 'lucide-react';
 
 const CATEGORIES = [
-  { id: 'tech', name: 'Tech & Electronics', icon: Smartphone, color: 'from-blue-500 to-cyan-500' },
-  { id: 'food', name: 'Food & Dining', icon: UtensilsCrossed, color: 'from-orange-500 to-red-500' },
-  { id: 'travel', name: 'Travel & Hotels', icon: Plane, color: 'from-purple-500 to-pink-500' },
-  { id: 'fashion', name: 'Fashion & Apparel', icon: Shirt, color: 'from-pink-500 to-rose-500' },
-  { id: 'home', name: 'Home & Garden', icon: Home, color: 'from-green-500 to-emerald-500' },
-  { id: 'beauty', name: 'Beauty & Personal Care', icon: Sparkles, color: 'from-fuchsia-500 to-purple-500' },
-  { id: 'sports', name: 'Sports & Fitness', icon: Dumbbell, color: 'from-teal-500 to-cyan-500' },
-  { id: 'entertainment', name: 'Entertainment & Media', icon: Tv, color: 'from-indigo-500 to-blue-500' },
-  { id: 'shopping', name: 'Shopping & Retail', icon: ShoppingBag, color: 'from-yellow-500 to-orange-500' },
-  { id: 'health', name: 'Health & Medical', icon: Stethoscope, color: 'from-red-500 to-pink-500' },
-  { id: 'education', name: 'Education & Learning', icon: GraduationCap, color: 'from-blue-500 to-indigo-500' },
-  { id: 'automotive', name: 'Automotive', icon: Car, color: 'from-gray-500 to-slate-500' },
-  { id: 'business', name: 'Business & Services', icon: Briefcase, color: 'from-violet-500 to-purple-500' },
+  { id: 'ecommerce', name: 'E-commerce', icon: ShoppingBag, color: 'from-blue-500 to-indigo-500' },
+  { id: 'food', name: 'Food & dining', icon: UtensilsCrossed, color: 'from-orange-500 to-red-500' },
+  { id: 'locations', name: 'Locations', icon: MapPin, color: 'from-green-500 to-emerald-500' },
 ];
+
 
 export function CategorySelectionPage() {
   const navigate = useNavigate();
@@ -82,7 +63,9 @@ export function CategorySelectionPage() {
             Choose a Category
           </h2>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-40 mb-8">
+
             {CATEGORIES.map((category) => {
               const Icon = category.icon;
               const isSelected = selectedCategory === category.id;
@@ -92,25 +75,25 @@ export function CategorySelectionPage() {
                   key={category.id}
                   onClick={() => handleCategorySelect(category.id)}
                   className={`
-                    relative p-6 rounded-xl border-2 transition-all duration-200
+                    relative h-full flex flex-col justify-between p-4 rounded-xl border-2 transition-all duration-200
                     ${isSelected 
                       ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-lg scale-105' 
                       : 'border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-md'
                     }
                   `}
                 >
-                  <div className="flex flex-col items-center text-center gap-3">
-                    <div className={`bg-gradient-to-br ${category.color} p-4 rounded-xl shadow-md`}>
-                      <Icon className="w-8 h-8 text-white" />
+                  <div className="flex flex-col items-center text-center gap-2 flex-1 justify-center">
+                    <div className={`bg-gradient-to-br ${category.color} p-3 rounded-lg shadow-md`}>
+                      <Icon className="w-7 h-7 text-white" />
                     </div>
-                    <span className="font-medium text-gray-900 dark:text-white">
+                    <span className="font-medium text-gray-900 dark:text-white text-base">
                       {category.name}
                     </span>
                   </div>
                   
                   {isSelected && (
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="absolute top-2 right-2 w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
@@ -119,6 +102,10 @@ export function CategorySelectionPage() {
               );
             })}
           </div>
+
+
+
+
 
           {/* Error Message */}
           {error && (

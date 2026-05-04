@@ -6,20 +6,11 @@ import { Skeleton } from '../../components/ui/skeleton';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const CATEGORY_NAMES: Record<string, string> = {
-  'tech': 'Tech & Electronics',
-  'food': 'Food & Dining',
-  'travel': 'Travel & Hotels',
-  'fashion': 'Fashion & Apparel',
-  'home': 'Home & Garden',
-  'beauty': 'Beauty & Personal Care',
-  'sports': 'Sports & Fitness',
-  'entertainment': 'Entertainment & Media',
-  'shopping': 'Shopping & Retail',
-  'health': 'Health & Medical',
-  'education': 'Education & Learning',
-  'automotive': 'Automotive',
-  'business': 'Business & Services',
+  'ecommerce': 'E-commerce',
+  'food': 'Food & dining',
+  'locations': 'Locations',
 };
+
 
 const SENTIMENT_COLORS: Record<string, string> = {
   'Positive': '#10b981',
