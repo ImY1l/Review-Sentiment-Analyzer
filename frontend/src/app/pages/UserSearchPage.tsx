@@ -8,8 +8,8 @@ const PLATFORMS = [
   { id: 'lazada', name: 'Lazada', category: 'ecommerce' },
   { id: 'shopee', name: 'Shopee', category: 'ecommerce' },
   { id: 'amazon', name: 'Amazon', category: 'ecommerce' },
-  { id: 'google_maps', name: 'Google Maps', category: 'locations' },
-  { id: 'google_product', name: 'Google Reviews', category: 'locations' },
+  { id: 'google_maps', name: 'Google Maps', category: 'locations',  google_type: 'maps'},
+  { id: 'google', name: 'Google Product Reviews', category: 'ecommerce', google_type: 'product'},
   { id: 'yelp', name: 'Yelp', category: 'food' },
   { id: 'tripadvisor', name: 'Tripadvisor', category: 'food' },
 ];
@@ -218,7 +218,12 @@ const supportedPlatforms = selectedSupported;
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Analyzing Reviews</h3>
 
               <p className="text-gray-600 dark:text-gray-400 mb-2">
-                Scraping from: <span className="font-semibold text-purple-600 dark:text-purple-400">{selectedPlatforms.join(', ')}</span>
+                Scraping from: <span className="font-semibold text-purple-600 dark:text-purple-400">
+                  {selectedPlatforms.map(id => {
+                    const p = PLATFORMS.find(platform => platform.id === id);
+                    return p ? p.name : id;
+                  }).join(', ')}
+                </span>
               </p>
               <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">This may take 2-5 minutes</p>
               <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">

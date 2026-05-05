@@ -96,7 +96,7 @@ import asyncio
 from app.scrapers.lazada_scraper import scrape_lazada
 from app.scrapers.amazon_scraper import scrape_amazon
 from app.scrapers.shopee_scraper import scrape_shopee
-from app.scrapers.google_product_scraper import scrape_google_product_reviews, scrape_google_maps_reviews
+from app.scrapers.google_scraper import scrape_google
 
 class ScrapeRequest(BaseModel):
     query: str
@@ -168,13 +168,13 @@ async def unified_search(request: SearchRequest):
             if result.get('success') and result.get('product_id'):
                 product_ids.append(result['product_id'])
                 platforms_scraped.append('shopee')
-        elif platform.lower() == 'google_product':
-            result = await scrape_google_product_reviews(request.query, request.user_id)
+        elif platform.lower() == 'google':
+            result = await scrape_google(request.query, request.user_id, 'product')
             if result.get('success') and result.get('product_id'):
                 product_ids.append(result['product_id'])
-                platforms_scraped.append('google_product')
+                platforms_scraped.append('google')
         elif platform.lower() == 'google_maps':
-            result = await scrape_google_maps_reviews(request.query, request.user_id)
+            result = await scrape_google(request.query, request.user_id, 'maps')
             if result.get('success') and result.get('product_id'):
                 product_ids.append(result['product_id'])
                 platforms_scraped.append('google_maps')
