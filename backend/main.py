@@ -94,9 +94,11 @@ from typing import List
 from pydantic import BaseModel
 import asyncio
 from app.scrapers.lazada_scraper import scrape_lazada
-from app.scrapers.amazon_scraper import scrape_amazon
-from app.scrapers.shopee_scraper import scrape_shopee
+from app.scrapers.amazon_scraper import scrape_amazon_reviews as scrape_amazon
+# from app.scrapers.shopee_scraper import scrape_shopee
 from app.scrapers.google_scraper import scrape_google
+from app.scrapers.tripadvisor_scraper import scrape_tripadvisor_reviews as scrape_tripadvisor
+from app.scrapers.yelp_scraper import scrape_yelp_reviews as scrape_yelp
 
 class ScrapeRequest(BaseModel):
     query: str
@@ -125,16 +127,16 @@ async def scrape_amazon_api(request: ScrapeRequest):
     except Exception as e:
       return {"success": False, "product_id": None, "message": str(e)}
 
-@app.post("/api/scrapers/shopee")
-async def scrape_shopee_api(request: ScrapeRequest):
-    """
-    Scrape Shopee reviews for product query.
-    """
-    from app.scrapers.shopee_scraper import scrape_shopee
-    try:
-      return await scrape_shopee(request.query, request.user_id)
-    except Exception as e:
-      return {"success": False, "product_id": None, "message": str(e)}
+# @app.post("/api/scrapers/shopee")
+# async def scrape_shopee_api(request: ScrapeRequest):
+#     """
+#     Scrape Shopee reviews for product query.
+#     """
+#     from app.scrapers.shopee_scraper import scrape_shopee
+#     try:
+#       return await scrape_shopee(request.query, request.user_id)
+#     except Exception as e:
+#       return {"success": False, "product_id": None, "message": str(e)}
 
 
 class SearchRequest(BaseModel):
@@ -163,11 +165,11 @@ async def unified_search(request: SearchRequest):
             if result.get('success') and result.get('product_id'):
                 product_ids.append(result['product_id'])
                 platforms_scraped.append('amazon')
-        elif platform.lower() == 'shopee':
-            result = await scrape_shopee(request.query, request.user_id)
-            if result.get('success') and result.get('product_id'):
-                product_ids.append(result['product_id'])
-                platforms_scraped.append('shopee')
+        # elif platform.lower() == 'shopee':
+        #     result = await scrape_shopee(request.query, request.user_id)
+        #     if result.get('success') and result.get('product_id'):
+        #         product_ids.append(result['product_id'])
+        #         platforms_scraped.append('shopee')
         elif platform.lower() == 'google':
             result = await scrape_google(request.query, request.user_id, 'product')
             if result.get('success') and result.get('product_id'):
@@ -178,6 +180,16 @@ async def unified_search(request: SearchRequest):
             if result.get('success') and result.get('product_id'):
                 product_ids.append(result['product_id'])
                 platforms_scraped.append('google_maps')
+        elif platform.lower() == 'tripadvisor':
+            result = await scrape_tripadvisor(request.query, request.user_id)
+            if result.get('success') and result.get('product_id'):
+                product_ids.append(result['product_id'])
+                platforms_scraped.append('tripadvisor')
+        elif platform.lower() == 'yelp':
+            result = await scrape_yelp(request.query, request.user_id)
+            if result.get('success') and result.get('product_id'):
+                product_ids.append(result['product_id'])
+                platforms_scraped.append('yelp')
 
 
     if not product_ids:
