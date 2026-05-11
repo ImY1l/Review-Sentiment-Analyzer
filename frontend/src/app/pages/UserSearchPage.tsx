@@ -9,7 +9,6 @@ const PLATFORMS = [
   { id: 'shopee', name: 'Shopee', category: 'ecommerce' },
   { id: 'amazon', name: 'Amazon', category: 'ecommerce' },
   { id: 'google_maps', name: 'Google Maps', category: 'locations',  google_type: 'maps'},
-  { id: 'google', name: 'Google Product Reviews', category: 'ecommerce', google_type: 'product'},
   { id: 'yelp', name: 'Yelp', category: 'food' },
   { id: 'tripadvisor', name: 'Tripadvisor', category: 'food' },
 ];
@@ -34,7 +33,7 @@ export function UserSearchPage() {
   const [isSearching, setIsSearching] = useState(false);
 
   const platformMap: Record<string, string[]> = {
-    'ecommerce': ['shopee', 'lazada', 'amazon', 'google_product'],
+  'ecommerce': ['shopee', 'lazada', 'amazon'],
     'food': ['yelp', 'tripadvisor', 'google_maps'],
     'locations': ['google_maps', 'yelp', 'tripadvisor']
   };
@@ -66,7 +65,13 @@ export function UserSearchPage() {
     setError('');
 
     if (!query.trim()) {
-      setError('Please enter a product name');
+      setError(
+        currentCategory === 'food'
+          ? 'Please enter a restaurant or food place name'
+          : currentCategory === 'locations'
+            ? 'Please enter a location name'
+            : 'Please enter a product name'
+      );
       return;
     }
 
@@ -84,7 +89,7 @@ export function UserSearchPage() {
 
 // Filter platforms STRICTLY by category
 const platformMap: Record<string, string[]> = {
-  'ecommerce': ['shopee', 'lazada', 'amazon', 'google_product'],
+  'ecommerce': ['shopee', 'lazada', 'amazon'],
   'food': ['yelp', 'tripadvisor', 'google_maps'],
   'locations': ['google_maps', 'yelp', 'tripadvisor']
 };
@@ -288,7 +293,11 @@ const supportedPlatforms = selectedSupported;
 
               <div>
                 <label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
-                  What product would you like to analyze?
+                  {currentCategory === 'food'
+                    ? 'What food place would you like to analyze?'
+                    : currentCategory === 'locations'
+                      ? 'What location would you like to analyze?'
+                      : 'What product would you like to analyze?'}
                 </label>
                 <div className="relative">
                   <input
@@ -297,7 +306,13 @@ const supportedPlatforms = selectedSupported;
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                     className="w-full px-6 py-4 pr-12 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
-                    placeholder='e.g., "iPhone 15 Pro" or "Airbnb Paris"'
+                    placeholder={
+                      currentCategory === 'food'
+                        ? 'e.g., "Pizza Hut" or "Starbucks Penang"'
+                        : currentCategory === 'locations'
+                          ? 'e.g., "Central Park" or "Petronas Twin Towers"'
+                          : 'e.g., "iPhone 15 Pro" or "Airbnb Paris"'
+                    }
                   />
                   <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
                 </div>
