@@ -9,22 +9,31 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoggingIn) return;
+
+    setIsLoggingIn(true);
     setError('');
 
     if (!username || !password) {
       setError('Please fill in all fields');
+      setIsLoggingIn(false);
       return;
     }
 
-    const success = await login(username, password);
-    if (success) {
-      // Will be redirected by App component based on role
-      navigate('/');
-    } else {
-      setError('Invalid username or password');
+    try {
+      const success = await login(username, password);
+      if (success) {
+        // Will be redirected by App component based on role
+        navigate('/');
+      } else {
+        setError('Invalid username or password');
+      }
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -64,7 +73,8 @@ export function LoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+                disabled={isLoggingIn}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="Enter your username"
               />
             </div>
@@ -77,17 +87,19 @@ export function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+                disabled={isLoggingIn}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="Enter your password"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 font-semibold flex items-center justify-center gap-2"
+              disabled={isLoggingIn}
+              className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-200 font-semibold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <LogIn className="w-5 h-5" />
-              Login
+              {isLoggingIn ? 'Logging in…' : 'Login'}
             </button>
           </form>
 

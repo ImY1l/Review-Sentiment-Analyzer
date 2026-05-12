@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Search, Brain, Clock, Menu, X, ArrowLeft, Tag } from 'lucide-react';
+import { Search, Brain, ArrowLeft, Tag } from 'lucide-react';
 import { unifiedSearch } from '../services/api';
 
 const PLATFORMS = [
@@ -29,7 +29,6 @@ export function UserSearchPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
 
   const [error, setError] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
 
   const platformMap: Record<string, string[]> = {
@@ -140,78 +139,10 @@ const supportedPlatforms = selectedSupported;
     }
   };
 
-  const handleHistoryClick = (historyItem: typeof searchHistory[0]) => {
-    setQuery(historyItem.query);
-    setSelectedPlatforms(historyItem.platforms);
-    setIsSidebarOpen(false); // Close sidebar after selecting
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950">
       <div className="flex flex-col min-h-screen relative">
-        {/* Sidebar Toggle Button */}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="fixed top-20 left-4 z-50 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          title={isSidebarOpen ? "Close history" : "Open history"}
-        >
-          {isSidebarOpen ? (
-            <X className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-          ) : (
-            <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-          )}
-        </button>
-
-        {/* Sidebar - Search History */}
-        <div 
-          className={`
-            w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-6
-            fixed top-0 left-0 h-full z-40 transition-transform duration-300 ease-in-out
-            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          `}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Search History</h2>
-            </div>
-            <button
-              onClick={() => setIsSidebarOpen(false)}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              title="Close"
-            >
-              <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            </button>
-          </div>
-
-          {searchHistory.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No recent searches</p>
-          ) : (
-            <div className="space-y-3">
-              {searchHistory.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleHistoryClick(item)}
-                  className="w-full text-left p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-600 transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Tag className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-                    <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
-                      {CATEGORY_NAMES[item.category] || item.category}
-                    </span>
-                  </div>
-                  <p className="font-medium text-gray-900 dark:text-white truncate">{item.query}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {item.platforms.join(', ')}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {new Date(item.date).toLocaleDateString()}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Loading Overlay */}
         {isSearching && (
@@ -240,13 +171,6 @@ const supportedPlatforms = selectedSupported;
           </div>
         )}
 
-        {/* Overlay for mobile/tablet */}
-        {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-30"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
 
         {/* Main Content */}
         <div className={`flex-1 p-6 lg:p-12 ${isSearching ? 'opacity-50 pointer-events-none' : ''}`}>

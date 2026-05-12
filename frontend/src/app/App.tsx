@@ -41,7 +41,7 @@ function AppContent() {
       <div className="fixed top-4 right-4 flex items-center gap-3 z-50">
         <button
           onClick={toggleTheme}
-          className="p-3 bg-white dark:bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all border border-gray-200 dark:border-gray-700"
+          className="px-4 py-3 bg-white dark:bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all border border-gray-200 dark:border-gray-700"
           title="Toggle theme"
         >
           {theme === 'light' ? (
@@ -122,3 +122,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+

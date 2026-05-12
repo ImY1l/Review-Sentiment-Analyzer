@@ -1,322 +1,452 @@
 # app/scrapers/shopee_scraper.py
+
 from playwright.async_api import async_playwright
 from app.database import reviews_collection, products_collection
 from datetime import datetime
 import asyncio
 import uuid
 
-async def _dismiss_popups(page):
-    """Dismiss language selector and/or ad popup — in any order, within 6 seconds."""
-    print("  → Checking for popups...")
-    deadline = 6  # seconds total to watch for popups
-    dismissed = []
 
-    for _ in range(deadline * 2):  # check every 500ms
-        await page.wait_for_timeout(500)
+async def _wait(page, seconds: float = 2.0):
+    await page.wait_for_timeout(int(seconds * 1000))
 
-        # 1. Language selector — click "English" if visible
-        if 'language' not in dismissed:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HANDLE LANGUAGE POPUP
+# ─────────────────────────────────────────────────────────────────────────────
+async def _handle_language_popup(page) -> bool:
+    try:
+        print("  → Waiting for language popup...")
+
+        selectors = [
+            'button:has-text("English")',
+            'button:has-text("EN")',
+            'button >> text=English',
+            'text=English',
+        ]
+
+        for selector in selectors:
             try:
-                lang_btn = page.locator('button:has-text("English")').first
-                if await lang_btn.is_visible(timeout=300):
-                    await lang_btn.click()
-                    dismissed.append('language')
-                    print("  → Dismissed language selector")
-                    await page.wait_for_timeout(500)
-                    continue
-            except Exception:
-                pass
+                btn = page.locator(selector).first
 
-        # 2. Ad popup — click the X close button if visible
-        if 'ad' not in dismissed:
+                await btn.wait_for(state='visible', timeout=5000)
+
+                print(f"  → Found language button: {selector}")
+
+                await _wait(page, 1.5)
+
+                await btn.click(force=True)
+
+                await _wait(page, 3)
+
+                print("  → English selected.")
+                return True
+
+            except Exception:
+                continue
+
+        print("  → No language popup found.")
+        return False
+
+    except Exception as e:
+        print(f"  → Language popup error: {e}")
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HANDLE AD POPUP
+# ─────────────────────────────────────────────────────────────────────────────
+async def _handle_ad_popup(page) -> bool:
+    try:
+        print("  → Looking for ad popup...")
+
+        selectors = [
+            'button[aria-label="Close"]',
+            'svg[class*="close"]',
+            '[class*="close"]',
+            '[class*="dismiss"]',
+            'button.shopee-popup__close-btn',
+            '[class*="popup"] button',
+        ]
+
+        for selector in selectors:
             try:
-                close_btn = page.locator(
-                    'button.shopee-popup__close-btn, '
-                    '[class*="close"], '
-                    'button[aria-label="close"], '
-                    'svg[class*="close"]'
-                ).first
-                if await close_btn.is_visible(timeout=300):
-                    await close_btn.click()
-                    dismissed.append('ad')
-                    print("  → Dismissed ad popup")
-                    await page.wait_for_timeout(500)
-                    continue
+                btn = page.locator(selector).first
+
+                if await btn.is_visible(timeout=3000):
+
+                    print(f"  → Closing popup using: {selector}")
+
+                    await _wait(page, 1)
+
+                    await btn.click(force=True)
+
+                    await _wait(page, 2)
+
+                    print("  → Popup closed.")
+                    return True
+
             except Exception:
-                pass
+                continue
 
-        # Both dismissed — no need to keep waiting
-        if len(dismissed) >= 2:
-            break
+        print("  → No ad popup found.")
+        return False
 
-    print(f"  → Popups handled: {dismissed if dismissed else 'none found'}")
+    except Exception as e:
+        print(f"  → Ad popup error: {e}")
+        return False
 
 
-async def scrape_shopee(product_query: str, user_id: str, max_pages: int = 10) -> dict:
+# ─────────────────────────────────────────────────────────────────────────────
+# FIND SEARCH BOX
+# ─────────────────────────────────────────────────────────────────────────────
+async def _find_search_box(page):
+
+    selectors = [
+        'input[class*="shopee-searchbar-input"]',
+        'input[placeholder*="Search" i]',
+        'input[placeholder*="search" i]',
+        'input[class*="search-bar__input"]',
+        'input[type="search"]',
+        'form input',
+    ]
+
+    for selector in selectors:
+        try:
+            el = page.locator(selector).first
+
+            if await el.is_visible(timeout=3000):
+                print(f"  → Search box found: {selector}")
+                return el
+
+        except Exception:
+            continue
+
+    print("  → Search box not found.")
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN SCRAPER
+# ─────────────────────────────────────────────────────────────────────────────
+async def scrape_shopee(
+    product_query: str,
+    user_id: str,
+    max_pages: int = 10
+) -> dict:
+
     product_id = str(uuid.uuid4())
+
     products_collection.insert_one({
         'product_id': product_id,
-        'platform':   'shopee',
-        'query':      product_query,
-        'user_id':    user_id,
+        'platform': 'shopee',
+        'query': product_query,
+        'user_id': user_id,
         'scraped_at': datetime.utcnow()
     })
 
     reviews = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+
+        browser = await p.chromium.launch(
+            headless=False,
+            slow_mo=300
+        )
+
         context = await browser.new_context(
             viewport={'width': 1366, 'height': 768},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            locale='en-US',
+            java_script_enabled=True,
+            bypass_csp=True,
+            user_agent=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/120.0.0.0 Safari/537.36'
+            )
         )
+
         page = await context.new_page()
 
+        # Hide webdriver
+        await page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        })
+        """)
+
         try:
-            # 1. Go to Shopee Malaysia
+
+            # ─────────────────────────────────────────────────────────────
+            # STEP 1: OPEN SHOPEE
+            # ─────────────────────────────────────────────────────────────
             print("Step 1: Going to Shopee...")
-            await page.goto('https://shopee.com.my/', timeout=60000, wait_until='domcontentloaded')
-            await page.wait_for_timeout(2000)
 
-            # Handle any popups on homepage
-            await _dismiss_popups(page)
+            await page.goto(
+                'https://shopee.com.my/',
+                timeout=60000,
+                wait_until='domcontentloaded'
+            )
 
-            # 2. Search product
+            await page.wait_for_load_state('networkidle')
+
+            await _wait(page, 3)
+
+            # Debug screenshot
+            await page.screenshot(path="debug_homepage.png")
+
+            # Handle language popup
+            await _handle_language_popup(page)
+
+            # Handle ad popup
+            await _handle_ad_popup(page)
+
+            await _wait(page, 2)
+
+            # ─────────────────────────────────────────────────────────────
+            # STEP 2: SEARCH PRODUCT
+            # ─────────────────────────────────────────────────────────────
             print("Step 2: Searching product...")
-            search_box = page.locator(
-                'input[placeholder*="search" i], '
-                'input[class*="search"], '
-                'input[type="search"]'
-            ).first
+
+            search_box = await _find_search_box(page)
+
+            if not search_box:
+
+                await page.screenshot(path="searchbox_error.png")
+
+                await browser.close()
+
+                return {
+                    'success': False,
+                    'product_id': product_id,
+                    'reviews_count': 0,
+                    'message': 'Search box not found'
+                }
+
+            await search_box.click(force=True)
+
+            await _wait(page, 1)
+
             await search_box.fill(product_query)
+
+            await _wait(page, 1)
+
             await search_box.press('Enter')
-            await page.wait_for_timeout(4000)
 
-            # Dismiss any popup that appeared after search
-            await _dismiss_popups(page)
+            print("  → Search submitted.")
 
-            # 3. Open first product
+            await page.wait_for_load_state('networkidle')
+
+            await _wait(page, 4)
+
+            # Close popup after search
+            await _handle_ad_popup(page)
+
+            # ─────────────────────────────────────────────────────────────
+            # STEP 3: OPEN FIRST PRODUCT
+            # ─────────────────────────────────────────────────────────────
             print("Step 3: Opening first product...")
+
+            await page.wait_for_selector('a[href]', timeout=15000)
+
+            links = await page.locator('a[href]').all()
+
+            print(f"  → Total links found: {len(links)}")
+
             product_url = None
 
-            # Shopee product links contain /i. or shopee.com.my/<shop>/<product>-i.
-            product_elements = await page.locator(
-                'a[href*="-i."], a[href*="/product/"]'
-            ).all()
+            for link in links[:50]:
 
-            for link in product_elements[:5]:
-                href = await link.get_attribute('href')
-                if href and ('-i.' in href or '/product/' in href):
-                    product_url = href if href.startswith('http') else 'https://shopee.com.my' + href
-                    break
+                try:
+                    href = await link.get_attribute('href')
+
+                    if href and ('-i.' in href or '/product/' in href):
+
+                        if href.startswith('http'):
+                            product_url = href
+                        else:
+                            product_url = 'https://shopee.com.my' + href
+
+                        print(f"  → Product URL found:")
+                        print(product_url)
+
+                        break
+
+                except Exception:
+                    continue
 
             if not product_url:
-                await browser.close()
-                return {'success': False, 'product_id': product_id, 'reviews_count': 0,
-                        'message': 'No product link found'}
 
-            print(f"  → Product URL: {product_url}")
+                await page.screenshot(path="product_error.png")
+
+                await browser.close()
+
+                return {
+                    'success': False,
+                    'product_id': product_id,
+                    'reviews_count': 0,
+                    'message': 'No product link found'
+                }
+
             products_collection.update_one(
                 {'product_id': product_id},
                 {'$set': {'url': product_url}}
             )
 
-            await page.goto(product_url, wait_until='domcontentloaded', timeout=60000)
-            await page.wait_for_timeout(3000)
+            await page.goto(
+                product_url,
+                wait_until='domcontentloaded',
+                timeout=60000
+            )
 
-            # Dismiss any popup on product page
-            await _dismiss_popups(page)
+            await page.wait_for_load_state('networkidle')
 
-            # 4. Scroll down to reviews section
-            print("Step 4: Scrolling to reviews section...")
-            await page.evaluate("""
-                (() => {
-                    const el =
-                        document.querySelector('[class*="product-ratings"]') ||
-                        document.querySelector('[class*="ratings"]') ||
-                        document.querySelector('[class*="review"]');
-                    if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
-                    else window.scrollTo(0, document.body.scrollHeight * 0.7);
-                })();
-            """)
-            await page.wait_for_timeout(2000)
+            await _wait(page, 4)
 
-            # Scroll again to trigger lazy load
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await page.wait_for_timeout(2000)
-            await page.evaluate("""
-                (() => {
-                    const el =
-                        document.querySelector('[class*="product-ratings"]') ||
-                        document.querySelector('[class*="ratings"]') ||
-                        document.querySelector('[class*="review"]');
-                    if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
-                })();
-            """)
-            await page.wait_for_timeout(2000)
+            # Close popup again
+            await _handle_ad_popup(page)
 
-            # 5. Paginate through review sub-pages
+            # ─────────────────────────────────────────────────────────────
+            # STEP 4: SCROLL TO REVIEWS
+            # ─────────────────────────────────────────────────────────────
+            print("Step 4: Scrolling to reviews...")
+
+            for _ in range(5):
+                await page.mouse.wheel(0, 3000)
+                await _wait(page, 1)
+
+            await _wait(page, 3)
+
+            # ─────────────────────────────────────────────────────────────
+            # STEP 5: SCRAPE REVIEWS
+            # ─────────────────────────────────────────────────────────────
             page_num = 1
+
             while page_num <= max_pages:
+
                 print(f"Scraping review page {page_num}...")
 
-                # Keep review section in view
-                await page.evaluate("""
-                    (() => {
-                        const el =
-                            document.querySelector('[class*="product-ratings"]') ||
-                            document.querySelector('[class*="ratings"]') ||
-                            document.querySelector('[class*="review"]');
-                        if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
-                    })();
-                """)
-                await page.wait_for_timeout(1500)
+                await _wait(page, 2)
 
-                # Extract reviews
                 js_reviews = await page.evaluate("""
-                    (() => {
-                        // Shopee review items
-                        const items = Array.from(document.querySelectorAll(
-                            '[class*="shopee-product-rating"], ' +
-                            '[class*="product-rating__item"], ' +
-                            '[class*="review-item"]'
-                        ));
+                (() => {
 
-                        return items.map(function(el) {
+                    const items = Array.from(document.querySelectorAll(
+                        '[class*="shopee-product-rating"],' +
+                        '[class*="review"],' +
+                        '[class*="rating"]'
+                    ));
 
-                            // --- REVIEWER ---
-                            const reviewer =
-                                el.querySelector('[class*="author"], [class*="buyer"], [class*="name"]')
-                                  ?.textContent?.trim() || 'Anonymous';
+                    return items.map(el => {
 
-                            // --- DATE ---
-                            const date =
-                                el.querySelector('[class*="time"], [class*="date"]')
-                                  ?.textContent?.trim() || '';
+                        const reviewer =
+                            el.querySelector('[class*="author"], [class*="name"]')
+                            ?.textContent?.trim() || 'Anonymous';
 
-                            // --- RATING: count filled stars ---
-                            const filledStars = el.querySelectorAll(
-                                'svg[class*="star--active"], '   +
-                                '[class*="star--on"], '          +
-                                '[class*="icon-star-active"]'
-                            ).length;
-                            // fallback: aria-label e.g. "4 stars"
-                            let rating = filledStars;
-                            if (rating === 0) {
-                                const ariaEl = el.querySelector('[aria-label*="star"]');
-                                if (ariaEl) {
-                                    const m = (ariaEl.getAttribute('aria-label') || '').match(/(\\d+)/);
-                                    if (m) rating = parseInt(m[1]);
-                                }
-                            }
+                        const comment =
+                            el.querySelector('[class*="content"], [class*="comment"]')
+                            ?.textContent?.trim() || '';
 
-                            // --- FULL COMMENT ---
-                            const comment =
-                                el.querySelector('[class*="content"], [class*="text"], [class*="comment"]')
-                                  ?.textContent?.trim() || '';
+                        const date =
+                            el.querySelector('[class*="time"], [class*="date"]')
+                            ?.textContent?.trim() || '';
 
-                            // --- VARIANT (Color, Size, etc.) ---
-                            const variant =
-                                el.querySelector('[class*="variant"], [class*="sku"]')
-                                  ?.textContent?.trim() || '';
+                        const rating = el.querySelectorAll(
+                            'svg[class*="star"]'
+                        ).length;
 
-                            // --- HELPFUL / LIKES ---
-                            const likes = parseInt(
-                                el.querySelector('[class*="like"], [class*="helpful"]')
-                                  ?.textContent?.trim() || '0'
-                            ) || 0;
+                        return {
+                            reviewer,
+                            comment,
+                            date,
+                            rating
+                        };
 
-                            return { reviewer, rating, comment, date, variant, likes };
-                        }).filter(function(r) { return r.comment.length > 0; });
-                    })();
+                    }).filter(r => r.comment.length > 0);
+
+                })();
                 """)
 
-                print(f"  → Found {len(js_reviews)} reviews on page {page_num}")
+                print(f"  → Found {len(js_reviews)} reviews")
 
-                if len(js_reviews) > 0:
-                    reviews.extend([{
-                        'review_id':     str(uuid.uuid4()),
-                        'platform':      'shopee',
-                        'product_id':    product_id,
+                for r in js_reviews:
+
+                    reviews.append({
+                        'review_id': str(uuid.uuid4()),
+                        'platform': 'shopee',
+                        'product_id': product_id,
                         'product_query': product_query,
                         'reviewer_name': r['reviewer'],
-                        'rating':        r['rating'],
-                        'comment':       r['comment'],
-                        'variant':       r['variant'],
-                        'date':          r['date'],
-                        'likes':         r['likes'],
-                        'user_id':       user_id,
-                        'created_at':    datetime.utcnow()
-                    } for r in js_reviews])
+                        'rating': r['rating'],
+                        'comment': r['comment'],
+                        'date': r['date'],
+                        'user_id': user_id,
+                        'created_at': datetime.utcnow()
+                    })
 
                 if page_num >= max_pages:
                     break
 
-                # ── PAGINATION: click the next page number button ────────────
-                # Shopee pagination looks like: < 1 2 3 4 5 ... >
-                # The active page is highlighted in red
-                next_page_num = page_num + 1
-                clicked = await page.evaluate(
-                    """
-                    (nextPage) => {
-                        // Find the ratings/review section root
-                        const root =
-                            document.querySelector('[class*="product-ratings"]') ||
-                            document.querySelector('[class*="ratings"]')         ||
-                            document.querySelector('[class*="review"]')          ||
-                            document;
+                # Try next page
+                try:
 
-                        // Find all visible buttons/spans with the exact next page number
-                        const targetText = String(nextPage);
-                        const candidates = Array.from(root.querySelectorAll(
-                            'button, a, li, span, div'
-                        ));
+                    next_btn = page.locator(
+                        'button.shopee-icon-button--right'
+                    ).first
 
-                        const btn = candidates.find(function(el) {
-                            const text = (el.textContent || '').trim();
-                            if (text !== targetText) return false;
-                            const rect = el.getBoundingClientRect();
-                            if (rect.width === 0 || rect.height === 0) return false;
-                            // Must be near the bottom of the page (pagination area)
-                            if (rect.top < window.innerHeight * 0.4) return false;
-                            return true;
-                        });
+                    if await next_btn.is_visible(timeout=5000):
 
-                        if (!btn) return false;
-                        btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-                        btn.click();
-                        return true;
-                    }
-                    """,
-                    next_page_num
-                )
+                        await next_btn.click(force=True)
 
-                if not clicked:
-                    print(f"  → No pagination button for page {next_page_num}, stopping.")
+                        await _wait(page, 3)
+
+                        page_num += 1
+
+                    else:
+                        print("  → No next page button.")
+                        break
+
+                except Exception:
+                    print("  → Pagination ended.")
                     break
 
-                await page.wait_for_timeout(3000)
-                page_num += 1
-
-            # Save to DB
+            # ─────────────────────────────────────────────────────────────
+            # SAVE REVIEWS
+            # ─────────────────────────────────────────────────────────────
             if reviews:
                 reviews_collection.insert_many(reviews)
 
-            print(f"Done. Saved {len(reviews)} Shopee reviews from {page_num} page(s).")
+            print(f"Done. Saved {len(reviews)} reviews.")
+
             await browser.close()
+
             return {
-                'success':       True,
-                'product_id':    product_id,
+                'success': True,
+                'product_id': product_id,
                 'reviews_count': len(reviews),
-                'message':       f'Scraped {len(reviews)} Shopee reviews across {page_num} pages'
+                'message': f'Scraped {len(reviews)} Shopee reviews'
             }
 
         except Exception as e:
+
             print(f"Error: {str(e)}")
+
+            await page.screenshot(path="fatal_error.png")
+
             await browser.close()
-            return {'success': False, 'product_id': product_id,
-                    'reviews_count': 0, 'message': str(e)}
+
+            return {
+                'success': False,
+                'product_id': product_id,
+                'reviews_count': 0,
+                'message': str(e)
+            }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST
+# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    asyncio.run(scrape_shopee("iPhone 15", "test"))
+    asyncio.run(
+        scrape_shopee("iPhone 15", "test_user")
+    )

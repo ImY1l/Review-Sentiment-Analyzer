@@ -1,12 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { 
-  Brain, 
-  ShoppingBag,
-  UtensilsCrossed, 
-  MapPin 
-} from 'lucide-react';
+import { Brain, ShoppingBag, UtensilsCrossed, MapPin, History, Clock, Tag, X } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'ecommerce', name: 'E-commerce', icon: ShoppingBag, color: 'from-blue-500 to-indigo-500' },
@@ -14,12 +10,25 @@ const CATEGORIES = [
   { id: 'locations', name: 'Locations', icon: MapPin, color: 'from-green-500 to-emerald-500' },
 ];
 
-
 export function CategorySelectionPage() {
   const navigate = useNavigate();
-  const { user, setCategory } = useApp();
+  const { user, searchHistory, setCategory } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [error, setError] = useState('');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  const handleHistoryClick = (historyItem: typeof searchHistory[0]) => {
+    // Close history so the icon won't block content
+    setIsHistoryOpen(false);
+
+    // Move the selected search into the search page via URL params
+    const params = new URLSearchParams({
+      query: historyItem.query,
+      platforms: historyItem.platforms.join(','),
+    });
+    navigate(`/search?${params.toString()}`);
+  };
+
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -37,11 +46,76 @@ export function CategorySelectionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950 p-6 lg:p-12">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950 p-4 sm:p-6 lg:p-12">
+      <div className="max-w-7xl mx-auto relative">
+        {/* History button (moved from search page) */}
+        <button
+          onClick={() => setIsHistoryOpen((v) => !v)}
+          className="fixed top-4 sm:top-4 left-4 sm:left-6 z-50 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+
+
+          title={isHistoryOpen ? 'Close history' : 'Open history'}
+        >
+          <History className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+        </button>
+
+
+        {isHistoryOpen && (
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setIsHistoryOpen(false)}
+          />
+        )}
+
+        {isHistoryOpen && (
+          <div
+            className="fixed top-20 left-4 sm:left-6 z-50 w-96 max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 max-h-[calc(100vh-6rem)] overflow-auto"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Search History</h2>
+              </div>
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {searchHistory.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No recent searches</p>
+            ) : (
+              <div className="space-y-3">
+                {searchHistory.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleHistoryClick(item)}
+                    className="w-full text-left p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-600 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Tag className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+                        {item.category}
+                      </span>
+                    </div>
+                    <p className="font-medium text-gray-900 dark:text-white truncate">{item.query}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.platforms.join(', ')}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      {new Date(item.date).toLocaleDateString()}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
+        <div className="text-center mb-12 pt-8 sm:pt-0">
+          <div className="flex flex-col items-center justify-center gap-3 mb-4">
             <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-3 rounded-xl shadow-lg">
               <Brain className="w-8 h-8 text-white" />
             </div>
@@ -58,13 +132,13 @@ export function CategorySelectionPage() {
         </div>
 
         {/* Category Grid */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
             Choose a Category
           </h2>
-          
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-40 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+
 
             {CATEGORIES.map((category) => {
               const Icon = category.icon;
@@ -102,10 +176,6 @@ export function CategorySelectionPage() {
               );
             })}
           </div>
-
-
-
-
 
           {/* Error Message */}
           {error && (
