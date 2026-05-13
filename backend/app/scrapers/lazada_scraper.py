@@ -9,7 +9,7 @@ async def scrape_lazada(product_query: str, user_id: str, max_pages: int = 10) -
     product_doc = {
         'product_id': product_id,
         'platform': 'lazada',
-        'query': product_query,
+        'name': product_query,
         'user_id': user_id,
         'scraped_at': datetime.utcnow()
     }

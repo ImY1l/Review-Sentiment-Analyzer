@@ -213,9 +213,6 @@ export function UserResultsPage() {
               <Brain className="w-8 h-8 text-purple-600 dark:text-purple-400" />
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Analysis Results</h1>
             </div>
-            <p className="text-lg text-gray-600 dark:text-gray-300">
-              Product ID: <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">{productId}</span>
-            </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Platforms: {platformsFromUrl.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
             </p>

@@ -55,6 +55,8 @@ async def scrape_tripadvisor_reviews(query: str, user_id: str, max_pages: int = 
         'product_id': product_id,
         'platform':   'tripadvisor',
         'query':      query,
+        # MUST have a non-empty name for history UI
+        'name':       query,
         'user_id':    user_id,
         'scraped_at': datetime.utcnow()
     })
@@ -83,7 +85,7 @@ async def scrape_tripadvisor_reviews(query: str, user_id: str, max_pages: int = 
         products_collection.update_one(
             {'product_id': product_id},
             {'$set': {
-                'place_name':     place_name,
+                'name':           place_name,
                 'location_id':    location_id,
                 'overall_rating': overall_rating,
                 'total_reviews':  total_reviews,

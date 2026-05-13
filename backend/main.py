@@ -216,6 +216,60 @@ async def api_analyze(product_id: str):
         return {"success": False, "message": "No reviews found or analysis failed"}
     return result
 
+@app.get("/api/product/{product_id}/name")
+async def api_product_name(product_id: str):
+    """Get product name/title from the products collection."""
+    product = products_collection.find_one({"product_id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Prefer common naming fields used by scrapers.
+    name = product.get("name") or product.get("product_title") or product.get("product_name") or product.get("product_query")
+    if not name:
+        name = product_id
+    return {"success": True, "product_id": product_id, "name": name}
+
+
+@app.get("/api/history")
+async def api_history(user_id: str = "anonymous"):
+
+    reports = list(
+        analysis_collection.find(
+            {"user_id": user_id},
+            projection={
+                "_id": 1,
+                "product_id": 1,
+                "platforms": 1,
+                "summary": 1,
+                "avg_rating": 1,
+                "created_at": 1,
+            },
+        ).sort("created_at", -1).limit(10)
+    )
+
+    for r in reports:
+        r["report_id"] = str(r.pop("_id"))
+        # Ensure created_at is JSON-serializable
+        if isinstance(r.get("created_at"), datetime):
+            r["created_at"] = r["created_at"].isoformat()
+
+    # Inject product name for each report (MUST be present and non-empty for frontend sidebar)
+    for r in reports:
+        product_id = r.get("product_id")
+        product = products_collection.find_one({"product_id": product_id})
+
+        # products_collection documents (per your example) store the display title in `name`.
+        # Frontend history sidebar MUST render `item.name`, so we set it from products `name`.
+        r["name"] = (product.get("name") or "").strip() if product else ""
+
+        # If for any reason `name` is missing/empty, keep it non-empty but do NOT fallback to analysis fields.
+        if not r["name"]:
+            r["name"] = "Unknown Product"
+
+    return {"success": True, "items": reports}
+
+
+
 @app.get("/api/results/{product_id}")
 async def api_results(product_id: str):
     """Get latest analysis report for product"""
@@ -227,3 +281,4 @@ async def api_results(product_id: str):
         raise HTTPException(status_code=404, detail="No analysis found")
     report["_id"] = str(report["_id"])
     return report
+

@@ -1,8 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Brain, ShoppingBag, UtensilsCrossed, MapPin, History, Clock, Tag, X } from 'lucide-react';
+
+
+type HistoryItem = {
+  report_id: string;
+  product_id: string;
+  platforms: string[];
+  created_at?: string;
+  summary?: string;
+  avg_rating?: number;
+  // Optional DB product title injected by the /api/history endpoint.
+  name?: string;
+};
+
+
+
 
 const CATEGORIES = [
   { id: 'ecommerce', name: 'E-commerce', icon: ShoppingBag, color: 'from-blue-500 to-indigo-500' },
@@ -12,21 +27,65 @@ const CATEGORIES = [
 
 export function CategorySelectionPage() {
   const navigate = useNavigate();
-  const { user, searchHistory, setCategory } = useApp();
+  const { user, setCategory } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+
+  // DB-backed analysis history
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!user?.username) {
+        setHistoryItems([]);
+        return;
+      }
+
+      setHistoryLoading(true);
+      setHistoryError('');
+
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/history?user_id=${encodeURIComponent(user.username)}`
+        );
+        if (!res.ok) {
+          throw new Error(`Failed to load history (${res.status})`);
+        }
+        const data = await res.json();
+        if (!data?.success) {
+          throw new Error(data?.message || 'Failed to load history');
+        }
+        setHistoryItems(data.items || []);
+      } catch (e: any) {
+        setHistoryError(e?.message || 'Failed to load history');
+        setHistoryItems([]);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    loadHistory();
+  }, [user?.username]);
+
+
+
   const [error, setError] = useState('');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  const handleHistoryClick = (historyItem: typeof searchHistory[0]) => {
+  const handleHistoryClick = (historyItem: HistoryItem) => {
+
     // Close history so the icon won't block content
     setIsHistoryOpen(false);
 
-    // Move the selected search into the search page via URL params
+    // Move the selected analysis into the results page.
+    // UserResultsPage fetches analysis strictly by productId.
     const params = new URLSearchParams({
-      query: historyItem.query,
+      productId: historyItem.product_id,
       platforms: historyItem.platforms.join(','),
     });
-    navigate(`/search?${params.toString()}`);
+    navigate(`/results?${params.toString()}`);
+
   };
 
 
@@ -85,27 +144,39 @@ export function CategorySelectionPage() {
               </button>
             </div>
 
-            {searchHistory.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">No recent searches</p>
+            {historyLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading history...</p>
+            ) : historyError ? (
+              <p className="text-sm text-red-500 dark:text-red-400">{historyError}</p>
+            ) : historyItems.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No recent analyses</p>
             ) : (
               <div className="space-y-3">
-                {searchHistory.map((item) => (
+                {historyItems.map((item) => (
                   <button
-                    key={item.id}
+                    key={item.report_id}
                     onClick={() => handleHistoryClick(item)}
+
                     className="w-full text-left p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-600 transition-colors"
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <Tag className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                       <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
-                        {item.category}
+                        {item.avg_rating ? `★ ${item.avg_rating.toFixed(1)}` : 'Analysis'}
                       </span>
                     </div>
-                    <p className="font-medium text-gray-900 dark:text-white truncate">{item.query}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.platforms.join(', ')}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {new Date(item.date).toLocaleDateString()}
+                    <p className="font-medium text-gray-900 dark:text-white truncate">
+                      {item.name}
+
                     </p>
+
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.platforms.join(', ')}</p>
+                    {item.created_at && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </p>
+                    )}
+
                   </button>
                 ))}
               </div>

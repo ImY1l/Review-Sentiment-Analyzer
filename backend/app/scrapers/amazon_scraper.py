@@ -57,7 +57,7 @@ async def scrape_amazon_reviews(product_query: str, user_id: str, max_pages: int
     products_collection.insert_one({
         'product_id': product_id,
         'platform':   'amazon',
-        'query':      product_query,
+        'name':      product_query,
         'user_id':    user_id,
         'scraped_at': datetime.utcnow()
     })

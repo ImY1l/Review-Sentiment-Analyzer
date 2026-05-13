@@ -58,7 +58,7 @@ async def scrape_yelp_reviews(query: str, user_id: str, location: str = 'Malaysi
     products_collection.insert_one({
         'product_id': product_id,
         'platform': 'yelp',
-        'query': query,
+        'name': query,
         'location': location,
         'user_id': user_id,
         'scraped_at': datetime.utcnow()
@@ -89,12 +89,12 @@ async def scrape_yelp_reviews(query: str, user_id: str, location: str = 'Malaysi
         products_collection.update_one(
             {'product_id': product_id},
             {'$set': {
-                'place_name':      place_name,
-                'place_id':        place_id,
-                'overall_rating':  overall_rating,
-                'total_reviews':   total_reviews,
-                'address':         address,
-                'url':             place_url,
+                'name': place_name,
+                'place_id': place_id,
+                'overall_rating': overall_rating,
+                'total_reviews': total_reviews,
+                'address': address,
+                'url': place_url,
             }}
         )
 
