@@ -16,6 +16,15 @@ type HistoryItem = {
   name?: string;
 };
 
+const PLATFORM_NAME_MAP: Record<string, string> = {
+  'google_maps': 'Google Maps',
+  'tripadvisor': 'Tripadvisor',
+  'yelp': 'Yelp',
+  'amazon': 'Amazon',
+  'shopee': 'Shopee',
+  'lazada': 'Lazada',
+};
+
 
 
 
@@ -83,6 +92,8 @@ export function CategorySelectionPage() {
     const params = new URLSearchParams({
       productId: historyItem.product_id,
       platforms: historyItem.platforms.join(','),
+      // Pass a display title so the results page header can show "Searched"/query-like text.
+      query: historyItem.name || '',
     });
     navigate(`/results?${params.toString()}`);
 
@@ -170,7 +181,11 @@ export function CategorySelectionPage() {
 
                     </p>
 
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.platforms.join(', ')}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {item.platforms
+                        .map((id) => PLATFORM_NAME_MAP[id] || (id ? id.charAt(0).toUpperCase() + id.slice(1) : id))
+                        .join(', ')}
+                    </p>
                     {item.created_at && (
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                         {new Date(item.created_at).toLocaleDateString()}

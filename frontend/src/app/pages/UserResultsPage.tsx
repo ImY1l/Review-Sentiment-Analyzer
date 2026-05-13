@@ -11,6 +11,15 @@ const CATEGORY_NAMES: Record<string, string> = {
   'locations': 'Locations',
 };
 
+const PLATFORM_NAME_MAP: Record<string, string> = {
+  'google_maps': 'Google Maps',
+  'tripadvisor': 'Tripadvisor',
+  'yelp': 'Yelp',
+  'amazon': 'Amazon',
+  'shopee': 'Shopee',
+  'lazada': 'Lazada',
+};
+
 
 const SENTIMENT_COLORS: Record<string, string> = {
   'Positive': '#10b981',
@@ -22,29 +31,37 @@ export function UserResultsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { currentProductId, currentCategory } = useApp();
-  
   const productId = searchParams.get('productId') || currentProductId;
   const queryFromUrl = searchParams.get('query') || '';
   const platformsFromUrl = searchParams.get('platforms')?.split(',') || ['lazada'];
-
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedSection, setExpandedSection] = useState<string | null>('summary');
   const [retryCount, setRetryCount] = useState(0);
-
-  // Transform backend data to frontend format
   const transformedData = React.useMemo(() => {
     if (!analysisData) return null;
+
+    const rawSentiment = analysisData.sentiment_data || [];
+    const sentimentTotal = rawSentiment.reduce((acc: number, s: any) => acc + (Number(s.value) || 0), 0) || 0;
 
     return {
       summary: analysisData.summary || 'No summary available.',
       pros: analysisData.pros || [],
       cons: analysisData.cons || [],
-      sentimentData: (analysisData.sentiment_data || []).map((item: any) => ({
-        ...item,
-        color: SENTIMENT_COLORS[item.name] || '#8884d8'
-      })),
+      // Backend may return counts in sentiment_data.value.
+      // Convert to percentages for pie display, but keep the original count for hover.
+      sentimentData: rawSentiment.map((item: any) => {
+        const count = Number(item.value) || 0;
+        const percentage = sentimentTotal > 0 ? (count / sentimentTotal) * 100 : 0;
+
+        return {
+          ...item,
+          count,
+          value: Math.round(percentage * 10) / 10, // keep 1-decimal precision for label
+          color: SENTIMENT_COLORS[item.name] || '#8884d8'
+        };
+      }),
       ratingData: analysisData.rating_data || [],
       avg_rating: analysisData.avg_rating || 0,
       recommend_rate: analysisData.recommend_rate || 0,
@@ -211,19 +228,18 @@ export function UserResultsPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-2">
               <Brain className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Analysis Results</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                {queryFromUrl || 'Analysis Results'}
+              </h1>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Platforms: {platformsFromUrl.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+              Platforms: {platformsFromUrl
+                .map((p) => PLATFORM_NAME_MAP[p] || (p ? p.charAt(0).toUpperCase() + p.slice(1) : p))
+                .join(', ')}
             </p>
             {currentCategory && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Category: {CATEGORY_NAMES[currentCategory] || currentCategory}
-              </p>
-            )}
-            {queryFromUrl && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 italic">
-                Searched: {queryFromUrl}
               </p>
             )}
           </div>
@@ -304,7 +320,6 @@ export function UserResultsPage() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
                   
@@ -315,7 +330,10 @@ export function UserResultsPage() {
                           <div className="w-4 h-4 rounded" style={{ backgroundColor: item.color }}></div>
                           <span className="font-medium text-gray-900 dark:text-white">{item.name}</span>
                         </div>
-                        <span className="font-semibold text-gray-900 dark:text-white">{item.value}%</span>
+                        <div className="text-right">
+                          <div className="font-semibold text-gray-900 dark:text-white">{item.value}%</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{item.count} reviews</div>
+                        </div>
                       </div>
                     ))}
                   </div>
