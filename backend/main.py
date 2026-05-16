@@ -17,8 +17,29 @@ from app.database import (
     platforms_collection,
     reviews_collection,
     analysis_collection,
-    configs_collection
+    configs_collection,
+    logs_collection,
 )
+
+LEVELS = {"info", "warning", "error", "success"}
+
+
+def record_log(*, level: str, action: str, details: str, user: str | None = None):
+    if level not in LEVELS:
+        level = "info"
+    doc = {
+        "level": level,
+        "action": action,
+        "details": details,
+        "user": user,
+        "timestamp": datetime.utcnow(),
+    }
+    try:
+        logs_collection.insert_one(doc)
+    except Exception:
+        # Avoid breaking core user flows if logging fails
+        pass
+
 
 app = FastAPI(title="Reviews Analyzer API", version="1.0.0")
 
@@ -41,20 +62,40 @@ class LoginRequest(BaseModel):
 async def login(request: LoginRequest):
     # Find user by username
     user = users_collection.find_one({"username": request.username})
-    
+
     if not user:
+        record_log(
+            level="error",
+            action="login",
+            details="Invalid credentials",
+            user=request.username,
+        )
         return {"success": False, "message": "Invalid credentials"}
-    
+
     # Verify password
     if not pwd_context.verify(request.password, user["password"]):
+        record_log(
+            level="error",
+            action="login",
+            details="Invalid credentials",
+            user=request.username,
+        )
         return {"success": False, "message": "Invalid credentials"}
-    
+
+    record_log(
+        level="success",
+        action="login",
+        details="Login successful",
+        user=request.username,
+    )
+
     return {
         "username": user["username"],
         "name": user["name"],
         "email": user["email"],
-        "role": user["role"]
+        "role": user["role"],
     }
+
 
 class UserCreate(BaseModel):
     name: str
@@ -145,6 +186,13 @@ class SearchRequest(BaseModel):
 
 @app.post("/api/search")
 async def unified_search(request: SearchRequest):
+    record_log(
+        level="info",
+        action="search",
+        details=f"Search started: {request.query}; platforms={request.platforms}",
+        user=request.user_id,
+    )
+
     """
     Unified search: scrape selected platforms concurrently,
     aggregate reviews, analyze with AI, return results.
@@ -211,10 +259,31 @@ async def unified_search(request: SearchRequest):
 async def api_analyze(product_id: str):
     user_id = "anonymous"
     """Trigger AI analysis for scraped reviews"""
+    record_log(
+        level="info",
+        action="analysis",
+        details=f"Analysis started for product_id={product_id}",
+        user=user_id,
+    )
+
     result = analyze_reviews(product_id, user_id)
     if result is None:
+        record_log(
+            level="error",
+            action="analysis",
+            details=f"Analysis failed for product_id={product_id}",
+            user=user_id,
+        )
         return {"success": False, "message": "No reviews found or analysis failed"}
+
+    record_log(
+        level="success",
+        action="analysis",
+        details=f"Analysis completed for product_id={product_id}",
+        user=user_id,
+    )
     return result
+
 
 @app.get("/api/product/{product_id}/name")
 async def api_product_name(product_id: str):
@@ -270,8 +339,41 @@ async def api_history(user_id: str = "anonymous"):
 
 
 
+@app.get("/api/admin/logs")
+async def api_admin_logs(level: str = "all", limit: int = 50, offset: int = 0):
+    if level not in LEVELS and level != "all":
+        level = "all"
+
+    query = {}
+    if level != "all":
+        query = {"level": level}
+
+    cursor = logs_collection.find(query).sort("timestamp", -1).skip(offset).limit(limit)
+    results = []
+    for log in cursor:
+        log_id = str(log.get("_id")) if log.get("_id") is not None else None
+        ts = log.get("timestamp")
+        ts_str = ts.isoformat() if isinstance(ts, datetime) else (str(ts) if ts is not None else "")
+
+        results.append(
+            {
+                "id": log_id or "",
+                "timestamp": ts_str,
+                "level": log.get("level"),
+                "action": log.get("action"),
+                "details": log.get("details"),
+                "user": log.get("user"),
+                # For frontend compatibility: map action->message if message absent
+                "message": log.get("action") or log.get("details") or "",
+            }
+        )
+
+    return results
+
+
 @app.get("/api/results/{product_id}")
 async def api_results(product_id: str):
+
     """Get latest analysis report for product"""
     report = analysis_collection.find_one(
         {"product_id": product_id},

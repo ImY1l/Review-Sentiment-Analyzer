@@ -72,6 +72,15 @@ const [currentCategory, setCurrentCategory] = useState<string | null>(null);
       }
 
       const result = await response.json();
+
+      if (result?.success === false) {
+        return false;
+      }
+
+      if (!result?.username || !result?.role) {
+        return false;
+      }
+
       setUser({
         username: result.username,
         name: result.name,

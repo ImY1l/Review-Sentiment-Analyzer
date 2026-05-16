@@ -1,68 +1,54 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle, XCircle, Info, Brain, Users, Database } from 'lucide-react';
+import { getLogs } from '../services/api';
 
 interface LogEntry {
   id: string;
   timestamp: string;
   level: 'error' | 'warning' | 'info' | 'success';
+  action?: string;
   message: string;
   details: string;
+  user?: string;
 }
-
-const MOCK_LOGS: LogEntry[] = [
-  {
-    id: '1',
-    timestamp: '2026-02-07 14:23:15',
-    level: 'error',
-    message: 'Failed to scrape reviews from Yelp API',
-    details: 'Connection timeout after 30 seconds. Rate limit may have been exceeded.'
-  },
-  {
-    id: '2',
-    timestamp: '2026-02-07 14:15:42',
-    level: 'warning',
-    message: 'High memory usage detected',
-    details: 'System memory usage reached 85%. Consider optimizing review processing.'
-  },
-  {
-    id: '3',
-    timestamp: '2026-02-07 14:10:33',
-    level: 'success',
-    message: 'Successfully processed 1,250 reviews',
-    details: 'Product: iPhone 15, Platforms: Amazon, Google Reviews'
-  },
-  {
-    id: '4',
-    timestamp: '2026-02-07 13:58:21',
-    level: 'info',
-    message: 'New user registration',
-    details: 'Username: john_doe, Email: john@example.com'
-  },
-  {
-    id: '5',
-    timestamp: '2026-02-07 13:45:18',
-    level: 'error',
-    message: 'AI model inference failed',
-    details: 'Sentiment analysis model returned unexpected format. Falling back to default model.'
-  },
-  {
-    id: '6',
-    timestamp: '2026-02-07 13:30:55',
-    level: 'success',
-    message: 'Database backup completed',
-    details: 'Backup size: 2.4 GB, Duration: 45 seconds'
-  }
-];
 
 export function AdminLogsPage() {
   const navigate = useNavigate();
-  const [logs] = useState<LogEntry[]>(MOCK_LOGS);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
 
-  const filteredLogs = filterLevel === 'all' 
-    ? logs 
-    : logs.filter(log => log.level === filterLevel);
+  useEffect(() => {
+    async function fetchLogs() {
+      try {
+        setLoading(true);
+        setError('');
+        const data = await getLogs({ level: filterLevel });
+        // Backend may return action/details/message; normalize for UI
+        const normalized: LogEntry[] = (data as any[]).map((log) => ({
+          id: String(log.id ?? ''),
+          timestamp: String(log.timestamp ?? ''),
+          level: log.level,
+          action: log.action,
+          message: String(log.message ?? log.action ?? log.details ?? ''),
+          details: String(log.details ?? ''),
+          user: log.user ? String(log.user) : undefined,
+        }));
+        setLogs(normalized);
+      } catch (e) {
+        console.error(e);
+        setError('Failed to load logs.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchLogs();
+  }, [filterLevel]);
+
+  const filteredLogs = filterLevel === 'all' ? logs : logs.filter((log) => log.level === filterLevel);
 
   const getLevelIcon = (level: string) => {
     switch (level) {
@@ -154,62 +140,59 @@ export function AdminLogsPage() {
           </div>
         </div>
 
-        {/* Logs Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Level
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Timestamp
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Message
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Details
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredLogs.map((log) => (
-                  <tr 
-                    key={log.id} 
-                    className={`${getLevelColor(log.level)} hover:opacity-90 transition-opacity`}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {getLevelIcon(log.level)}
-                        <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">
-                          {log.level}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {log.timestamp}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">
-                      {log.message}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {log.details}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Loading/Error */}
+        {loading && (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading logs...</div>
+        )}
+        {!loading && error && (
+          <div className="text-center py-12 text-red-500 dark:text-red-400">{error}</div>
+        )}
 
-        {filteredLogs.length === 0 && (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            No logs found for the selected filter.
+        {/* Logs Table */}
+        {!loading && !error && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Level</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Timestamp</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Message</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredLogs.map((log) => (
+                    <tr
+                      key={log.id}
+                      className={`${getLevelColor(log.level)} hover:opacity-90 transition-opacity`}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {getLevelIcon(log.level)}
+                          <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">
+                            {log.level}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                        {log.timestamp}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">{log.message}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{log.details}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
+        )}
+
+        {!loading && !error && filteredLogs.length === 0 && (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">No logs found for the selected filter.</div>
         )}
       </div>
     </div>
   );
 }
+
