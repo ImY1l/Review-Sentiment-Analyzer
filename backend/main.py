@@ -3,10 +3,12 @@ try:
     nest_asyncio.apply()
 except ImportError:
     pass
+import os
 from fastapi import FastAPI, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from bson import ObjectId
+
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 from app.services.ai_service import analyze_reviews
@@ -578,6 +580,7 @@ async def api_admin_logs(level: str = "all", limit: int = 50, offset: int = 0):
     return results
 
 
+
 @app.get("/api/results/{product_id}")
 async def api_results(product_id: str):
 
@@ -590,4 +593,164 @@ async def api_results(product_id: str):
         raise HTTPException(status_code=404, detail="No analysis found")
     report["_id"] = str(report["_id"])
     return report
+
+
+# ============================================================================
+# ADMIN APIs - Review Sources
+# ============================================================================
+
+class AdminSourceUpdate(BaseModel):
+    name: str | None = None
+    url: str | None = None
+    status: str | None = None  # 'available' | 'unavailable'
+    apiLimit: int | None = None
+
+
+def _format_source(doc: dict) -> dict:
+    source_id = str(doc.get("_id")) if doc.get("_id") is not None else str(doc.get("id") or "")
+
+    status = doc.get("status") or "available"
+    if status not in {"available", "unavailable"}:
+        status = "available"
+
+    last_checked = doc.get("lastChecked") or doc.get("last_checked") or ""
+    if isinstance(last_checked, datetime):
+        last_checked = last_checked.isoformat(sep=" ")
+
+    api_limit = int(doc.get("apiLimit") or doc.get("api_limit") or 0)
+    api_used = int(doc.get("apiUsed") or doc.get("api_used") or 0)
+    avg_resp = doc.get("avgResponseTime") or doc.get("avg_response_time") or "N/A"
+
+    return {
+        "id": source_id,
+        "name": doc.get("name") or "",
+        "url": doc.get("url") or "",
+        "status": status,
+        "lastChecked": last_checked,
+        "apiLimit": api_limit,
+        "apiUsed": api_used,
+        "avgResponseTime": str(avg_resp),
+    }
+
+
+@app.get("/api/admin/sources")
+async def api_admin_sources():
+    # Primary: review_platforms collection
+    sources = []
+    try:
+        cursor = platforms_collection.find({})
+        for doc in cursor:
+            sources.append(_format_source(doc))
+    except Exception:
+        sources = []
+
+    # Secondary fallback: configs collection (if review_platforms is empty)
+    if not sources:
+        try:
+            cursor = configs_collection.find({})
+            for doc in cursor:
+                sources.append(_format_source(doc))
+        except Exception:
+            sources = []
+
+    return sources
+
+
+@app.put("/api/admin/sources/{source_id}")
+async def api_admin_update_source(source_id: str, update: AdminSourceUpdate):
+    try:
+        oid = ObjectId(source_id)
+    except Exception:
+        # allow string-based _id if stored as plain string
+        oid = None
+
+    update_fields: dict[str, Any] = {}
+    if update.name is not None:
+        update_fields["name"] = update.name
+    if update.url is not None:
+        update_fields["url"] = update.url
+    if update.status is not None:
+        update_fields["status"] = update.status if update.status in {"available", "unavailable"} else "available"
+    if update.apiLimit is not None:
+        update_fields["apiLimit"] = int(update.apiLimit)
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Update in platforms_collection first, then configs_collection
+    updated = None
+    if oid is not None:
+        res = platforms_collection.update_one({"_id": oid}, {"$set": update_fields})
+        if res.matched_count:
+            updated = platforms_collection.find_one({"_id": oid})
+
+    if updated is None:
+        res = configs_collection.update_one({"_id": oid} if oid is not None else {"id": source_id}, {"$set": update_fields})
+        if res.matched_count:
+            updated = configs_collection.find_one({"_id": oid} if oid is not None else {"id": source_id})
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    return _format_source(updated)
+
+
+@app.post("/api/admin/sources/{source_id}/check")
+async def api_admin_check_source(source_id: str):
+    # Lightweight check: just validate key env is present if url hints SerpApi/Gemini
+    # and set lastChecked; real scraping verification is done during actual search.
+    start = datetime.utcnow()
+
+    source_doc = None
+    try:
+        try:
+            oid = ObjectId(source_id)
+            source_doc = platforms_collection.find_one({"_id": oid}) or configs_collection.find_one({"_id": oid})
+        except Exception:
+            source_doc = platforms_collection.find_one({"id": source_id}) or configs_collection.find_one({"id": source_id})
+    except Exception:
+        source_doc = None
+
+    if not source_doc:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    url = str(source_doc.get("url") or "")
+
+    has_serpapi = bool(os.getenv("SERPAPI_KEY")) if 'serpapi' in url.lower() or 'maps' in url.lower() else bool(os.getenv("SERPAPI_KEY"))
+    has_google = bool(os.getenv("GOOGLE_API_KEY"))
+
+    # Decide status based on which key appears relevant.
+    if 'serpapi' in url.lower() or has_serpapi:
+        status = 'available' if has_serpapi else 'unavailable'
+    else:
+        status = 'available' if has_google else 'unavailable'
+
+    elapsed_ms = (datetime.utcnow() - start).total_seconds() * 1000
+    avg_response_time = f"{elapsed_ms:.0f}ms" if elapsed_ms else "N/A"
+
+    update_fields = {
+        "status": status,
+        "lastChecked": datetime.utcnow().isoformat(sep=" "),
+        # update usage counters conservatively
+        "apiUsed": int(source_doc.get("apiUsed") or source_doc.get("api_used") or 0),
+        "avgResponseTime": avg_response_time,
+    }
+
+    try:
+        platforms_collection.update_one({"_id": source_doc.get("_id")}, {"$set": update_fields})
+    except Exception:
+        try:
+            configs_collection.update_one({"_id": source_doc.get("_id")}, {"$set": update_fields})
+        except Exception:
+            pass
+
+    # Return updated (or fallback to formatted doc)
+    updated_doc = None
+    try:
+        updated_doc = platforms_collection.find_one({"_id": source_doc.get("_id")}) or configs_collection.find_one({"_id": source_doc.get("_id")})
+    except Exception:
+        updated_doc = None
+
+    return _format_source(updated_doc or source_doc)
+
 

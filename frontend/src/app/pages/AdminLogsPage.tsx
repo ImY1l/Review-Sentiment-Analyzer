@@ -20,8 +20,14 @@ export function AdminLogsPage() {
   const [error, setError] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
 
+  const PAGE_SIZE = 15;
+  const [page, setPage] = useState(0);
+
+
   useEffect(() => {
+    setPage(0);
     async function fetchLogs() {
+
       try {
         setLoading(true);
         setError('');
@@ -49,6 +55,9 @@ export function AdminLogsPage() {
   }, [filterLevel]);
 
   const filteredLogs = filterLevel === 'all' ? logs : logs.filter((log) => log.level === filterLevel);
+  const pagedLogs = filteredLogs.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+
 
   const getLevelIcon = (level: string) => {
     switch (level) {
@@ -162,7 +171,8 @@ export function AdminLogsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredLogs.map((log) => (
+                  {pagedLogs.map((log) => (
+
                     <tr
                       key={log.id}
                       className={`${getLevelColor(log.level)} hover:opacity-90 transition-opacity`}
@@ -191,6 +201,29 @@ export function AdminLogsPage() {
         {!loading && !error && filteredLogs.length === 0 && (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">No logs found for the selected filter.</div>
         )}
+
+        {!loading && !error && filteredLogs.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-4">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page <= 0}
+              className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Page {page + 1} of {totalPages}
+            </div>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );

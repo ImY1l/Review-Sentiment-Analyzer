@@ -1,100 +1,85 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, Users, Database, Settings, AlertTriangle, CheckCircle } from 'lucide-react';
-
-interface ReviewSource {
-  id: string;
-  name: string;
-  url: string;
-  status: 'available' | 'unavailable';
-  lastChecked: string;
-  apiLimit: number;
-  apiUsed: number;
-  avgResponseTime: string;
-}
-
-const INITIAL_SOURCES: ReviewSource[] = [
-  {
-    id: '1',
-    name: 'Amazon',
-    url: 'https://api.amazon.com/reviews',
-    status: 'available',
-    lastChecked: '2026-02-07 14:30:00',
-    apiLimit: 1000,
-    apiUsed: 342,
-    avgResponseTime: '1.2s'
-  },
-  {
-    id: '2',
-    name: 'Yelp',
-    url: 'https://api.yelp.com/v3/businesses',
-    status: 'unavailable',
-    lastChecked: '2026-02-07 14:25:00',
-    apiLimit: 500,
-    apiUsed: 500,
-    avgResponseTime: 'N/A'
-  },
-  {
-    id: '3',
-    name: 'TripAdvisor',
-    url: 'https://api.tripadvisor.com/reviews',
-    status: 'available',
-    lastChecked: '2026-02-07 14:28:00',
-    apiLimit: 750,
-    apiUsed: 125,
-    avgResponseTime: '2.1s'
-  },
-  {
-    id: '4',
-    name: 'Google Reviews',
-    url: 'https://maps.googleapis.com/maps/api/place',
-    status: 'available',
-    lastChecked: '2026-02-07 14:29:00',
-    apiLimit: 2000,
-    apiUsed: 856,
-    avgResponseTime: '0.8s'
-  },
-  {
-    id: '5',
-    name: 'Trustpilot',
-    url: 'https://api.trustpilot.com/v1/reviews',
-    status: 'available',
-    lastChecked: '2026-02-07 14:27:00',
-    apiLimit: 1500,
-    apiUsed: 423,
-    avgResponseTime: '1.5s'
-  }
-];
+import { checkSourceStatus, getSources, ReviewSource, updateSource } from '../services/api';
 
 export function AdminSourcesPage() {
   const navigate = useNavigate();
-  const [sources, setSources] = useState<ReviewSource[]>(INITIAL_SOURCES);
+  const [sources, setSources] = useState<ReviewSource[]>([]);
   const [editingSource, setEditingSource] = useState<string | null>(null);
   const [configData, setConfigData] = useState({
     apiLimit: 0,
     url: ''
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const toggleStatus = (sourceId: string) => {
-    setSources(sources.map(s => 
-      s.id === sourceId 
-        ? { ...s, status: s.status === 'available' ? 'unavailable' : 'available' }
-        : s
-    ));
+  useEffect(() => {
+    async function fetchSources() {
+      try {
+        setLoading(true);
+        setError('');
+        const data = await getSources();
+        setSources(data);
+      } catch (e) {
+        console.error('Failed to fetch sources:', e);
+        setError('Failed to load review sources.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchSources();
+  }, []);
+
+  const selectedSource = useMemo(
+    () => sources.find((s) => s.id === editingSource) || null,
+    [sources, editingSource]
+  );
+
+  useEffect(() => {
+    if (!selectedSource) return;
+    setConfigData({ apiLimit: selectedSource.apiLimit, url: selectedSource.url });
+  }, [selectedSource]);
+
+  const toggleStatus = async (sourceId: string) => {
+    const current = sources.find((s) => s.id === sourceId);
+    if (!current) return;
+
+    const nextStatus = current.status === 'available' ? 'unavailable' : 'available';
+
+    try {
+      const updated = await updateSource(sourceId, { status: nextStatus });
+      setSources((prev) => prev.map((s) => (s.id === sourceId ? updated : s)));
+    } catch (e) {
+      console.error('Failed to toggle source status:', e);
+    }
   };
 
   const handleEditConfig = (source: ReviewSource) => {
     setEditingSource(source.id);
-    setConfigData({ apiLimit: source.apiLimit, url: source.url });
   };
 
-  const handleSaveConfig = (sourceId: string) => {
-    setSources(sources.map(s => 
-      s.id === sourceId 
-        ? { ...s, apiLimit: configData.apiLimit, url: configData.url }
-        : s
-    ));
-    setEditingSource(null);
+  const handleSaveConfig = async (sourceId: string) => {
+    try {
+      const updated = await updateSource(sourceId, {
+        apiLimit: configData.apiLimit,
+        url: configData.url,
+      });
+      setSources((prev) => prev.map((s) => (s.id === sourceId ? updated : s)));
+      setEditingSource(null);
+    } catch (e) {
+      console.error('Failed to save source config:', e);
+    }
+  };
+
+  const handleCheck = async (sourceId: string) => {
+    try {
+      const updated = await checkSourceStatus(sourceId);
+      setSources((prev) => prev.map((s) => (s.id === sourceId ? updated : s)));
+    } catch (e) {
+      console.error('Failed to check source status:', e);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -115,6 +100,7 @@ export function AdminSourcesPage() {
   };
 
   const getUsageColor = (used: number, limit: number) => {
+    if (!limit) return 'text-gray-600 dark:text-gray-400';
     const percentage = (used / limit) * 100;
     if (percentage >= 90) return 'text-red-600 dark:text-red-400';
     if (percentage >= 70) return 'text-yellow-600 dark:text-yellow-400';
@@ -162,14 +148,19 @@ export function AdminSourcesPage() {
         </div>
 
         {/* Sources Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {sources.map((source) => (
-            <div 
-              key={source.id} 
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700"
-            >
-              {/* Header */}
-              <div className="flex items-start justify-between mb-4">
+        {loading ? (
+          <div className="text-gray-700 dark:text-gray-300">Loading sources...</div>
+        ) : error ? (
+          <div className="text-red-600 dark:text-red-400">{error}</div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {sources.map((source) => (
+              <div 
+                key={source.id} 
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                     {source.name}
@@ -278,20 +269,30 @@ export function AdminSourcesPage() {
                 </>
               )}
 
-              {/* Toggle Button */}
-              <button
-                onClick={() => toggleStatus(source.id)}
-                className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${
-                  source.status === 'available'
-                    ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/40'
-                    : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40'
-                }`}
-              >
-                Mark as {source.status === 'available' ? 'Unavailable' : 'Available'}
-              </button>
+              {/* Toggle Button + Check */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => toggleStatus(source.id)}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    source.status === 'available'
+                      ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/40'
+                      : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40'
+                  }`}
+                >
+                  Mark as {source.status === 'available' ? 'Unavailable' : 'Available'}
+                </button>
+                <button
+                  onClick={() => handleCheck(source.id)}
+                  className="px-4 py-2 rounded-lg font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                  title="Check source status"
+                >
+                  Check
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
