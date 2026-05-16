@@ -1,110 +1,103 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, Users, Database, Plus, Pencil, Trash2, X } from 'lucide-react';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  username: string;
-  dateJoined: string;
-  searchCount: number;
-}
-
-const INITIAL_USERS: User[] = [
-  {
-    id: '1',
-    name: 'Demo User',
-    email: 'demo@example.com',
-    username: 'demo',
-    dateJoined: '2026-01-15',
-    searchCount: 23
-  },
-  {
-    id: '2',
-    name: 'Shahbe Binti Mat Desa',
-    email: 'Shahbe.Desa@example.com',
-    username: 'shahbed',
-    dateJoined: '2026-01-20',
-    searchCount: 15
-  },
-  {
-    id: '3',
-    name: 'Syuhada Binti Abdul Rahman',
-    email: 'Syuhada.rahman@example.com',
-    username: 'syuhadar',
-    dateJoined: '2026-01-25',
-    searchCount: 42
-  },
-  {
-    id: '4',
-    name: 'Yousef Mohammed',
-    email: 'yous.mohd@example.com',
-    username: 'yousefmo',
-    dateJoined: '2026-02-01',
-    searchCount: 8
-  },
-  {
-    id: '5',
-    name: 'Emily Davis',
-    email: 'emily.davis@example.com',
-    username: 'emilyd',
-    dateJoined: '2026-02-03',
-    searchCount: 31
-  }
-];
+import { addUser, deleteUser, getUsers, updateUser, type User } from '../services/api';
 
 export function AdminUsersPage() {
   const navigate = useNavigate();
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    username: ''
+    username: '',
+    password: '',
+    role: 'user' as 'user' | 'admin'
   });
+
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        setLoading(true);
+        setError('');
+        const data = await getUsers();
+        setUsers(data);
+      } catch (e) {
+        console.error('Failed to fetch users:', e);
+        setError('Failed to load users.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchUsers();
+  }, []);
 
   const handleAdd = () => {
     setEditingUser(null);
-    setFormData({ name: '', email: '', username: '' });
+    setFormData({ name: '', email: '', username: '', password: '', role: 'user' });
+
     setIsModalOpen(true);
   };
 
   const handleEdit = (user: User) => {
     setEditingUser(user);
-    setFormData({ name: user.name, email: user.email, username: user.username });
+    setFormData({
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      password: '',
+      role: 'user'
+    });
+
     setIsModalOpen(true);
   };
 
-  const handleDelete = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(u => u.id !== userId));
+  const handleDelete = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+
+    try {
+      await deleteUser(userId);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch (e) {
+      console.error('Failed to delete user:', e);
+      setError('Failed to delete user.');
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (editingUser) {
-      // Update existing user
-      setUsers(users.map(u => 
-        u.id === editingUser.id 
-          ? { ...u, ...formData }
-          : u
-      ));
-    } else {
-      // Add new user
-      const newUser: User = {
-        id: Date.now().toString(),
-        ...formData,
-        dateJoined: new Date().toISOString().split('T')[0],
-        searchCount: 0
-      };
-      setUsers([...users, newUser]);
+    setError('');
+
+    try {
+      if (editingUser) {
+        const updated = await updateUser(editingUser.id, formData);
+        setUsers(prev => prev.map(u => (u.id === editingUser.id ? updated : u)));
+      } else {
+        const created = await addUser({
+          name: formData.name,
+          email: formData.email,
+          username: formData.username,
+          password: formData.password,
+          role: formData.role,
+          dateJoined: new Date().toISOString().split('T')[0],
+          searchCount: 0
+        } as any);
+
+        setUsers(prev => [...prev, created]);
+      }
+
+
+      setIsModalOpen(false);
+    } catch (e) {
+      console.error('Failed to submit user form:', e);
+      setError('Failed to save user.');
     }
-    
-    setIsModalOpen(false);
   };
 
   return (
@@ -282,6 +275,38 @@ export function AdminUsersPage() {
                     required
                   />
                 </div>
+
+                {!editingUser && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                        Role
+                      </label>
+                      <select
+                        value={formData.role}
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                      >
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+
 
                 <div className="flex gap-3 mt-6">
                   <button

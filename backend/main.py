@@ -105,10 +105,34 @@ class UserCreate(BaseModel):
 
 @app.post("/api/auth/register")
 async def register(user_data: UserCreate):
+    # DEBUG: log incoming payload + duplicate-check outcome
+    record_log(
+        level="info",
+        action="register_payload",
+        details=f"register payload username={user_data.username} email={user_data.email}",
+        user=user_data.username,
+    )
+
     # Check if user exists
     existing = users_collection.find_one({"$or": [{"username": user_data.username}, {"email": user_data.email}]})
     if existing:
-        return {"success": False, "message": "Username or email already exists"}
+        matched_username = existing.get("username") == user_data.username
+        matched_email = existing.get("email") == user_data.email
+        if matched_username:
+            msg = "Username already exists"
+        elif matched_email:
+            msg = "Email already exists"
+        else:
+            msg = "Username or email already exists"
+
+        record_log(
+            level="error",
+            action="register_duplicate",
+            details=f"duplicate found matched_username={matched_username} matched_email={matched_email} existing_username={existing.get('username')} existing_email={existing.get('email')}",
+            user=user_data.username,
+        )
+
+        return {"success": False, "message": msg}
 
     # Hash password
     password_safe = user_data.password[:72] if len(user_data.password) > 72 else user_data.password
@@ -123,9 +147,18 @@ async def register(user_data: UserCreate):
         "role": "user",
         "createdAt": datetime.utcnow()
     }
-    
+
     result = users_collection.insert_one(user)
+
+    record_log(
+        level="success",
+        action="register_insert",
+        details=f"inserted_id={str(result.inserted_id)} username={user_data.username}",
+        user=user_data.username,
+    )
+
     return {"success": True, "message": "User created successfully"}
+
 
 @app.get("/")
 async def root():
@@ -189,9 +222,10 @@ async def unified_search(request: SearchRequest):
     record_log(
         level="info",
         action="search",
-        details=f"Search started: {request.query}; platforms={request.platforms}",
+        details=f"Search started: {request.query}; platforms={request.platforms}; user_id={request.user_id}",
         user=request.user_id,
     )
+
 
     """
     Unified search: scrape selected platforms concurrently,
@@ -246,6 +280,27 @@ async def unified_search(request: SearchRequest):
     if not analysis:
         return {"success": False, "message": "Analysis failed"}
 
+    # Increment user's search count once per successful unified search.
+    # request.user_id from frontend is a username (e.g. "sshh"), not necessarily a MongoDB ObjectId.
+    # Try increment by Mongo _id first, then fall back to username.
+    try:
+        users_collection.update_one(
+            {"_id": ObjectId(request.user_id)},
+            {"$inc": {"searchCount": 1}},
+        )
+    except Exception:
+        pass
+
+    try:
+        users_collection.update_one(
+            {"username": request.user_id},
+            {"$inc": {"searchCount": 1}},
+        )
+    except Exception:
+        pass
+
+
+
     return {
         "success": True,
         "product_id": product_ids[0],
@@ -253,6 +308,7 @@ async def unified_search(request: SearchRequest):
         "platforms": platforms_scraped,
         "analysis": analysis
     }
+
 
 # AI Analysis endpoints
 @app.post("/api/analyze/{product_id}")
@@ -337,6 +393,157 @@ async def api_history(user_id: str = "anonymous"):
 
     return {"success": True, "items": reports}
 
+
+
+# ============================================================================
+# ADMIN APIs - User Management
+# ============================================================================
+
+from pydantic import BaseModel
+from typing import Any
+
+class AdminUserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    username: str
+    password: str
+    role: str = "user"
+    dateJoined: str | None = None
+    searchCount: int | None = 0
+
+
+class AdminUserUpdate(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    username: str | None = None
+    dateJoined: str | None = None
+    searchCount: int | None = None
+
+@app.get("/api/admin/users")
+async def api_admin_users():
+    users = []
+    cursor = users_collection.find({})
+    for u in cursor:
+        created_at = u.get("createdAt") or u.get("created_at")
+        if isinstance(created_at, datetime):
+            created_str = created_at.date().isoformat()
+        else:
+            created_str = str(created_at) if created_at else ""
+
+        users.append(
+            {
+                "id": str(u.get("_id")) if u.get("_id") is not None else "",
+                "name": u.get("name", ""),
+                "email": u.get("email", ""),
+                "username": u.get("username", ""),
+                "dateJoined": created_str,
+                "searchCount": int(u.get("searchCount", 0) or 0),
+                "role": u.get("role", "user"),
+            }
+        )
+
+    # Frontend expects User[] without role/searchCount optional; it will ignore extra fields.
+    return [
+        {
+            "id": x["id"],
+            "name": x["name"],
+            "email": x["email"],
+            "username": x["username"],
+            "dateJoined": x["dateJoined"],
+            "searchCount": x["searchCount"],
+        }
+        for x in users
+    ]
+
+@app.post("/api/admin/users")
+async def api_admin_create_user(user_data: AdminUserCreate):
+    # If frontend validation fails, FastAPI returns 400 without showing details in the server console.
+    # This record helps us identify which field caused the error.
+    record_log(level="info", action="admin_create_user_payload", details=f"payload username={user_data.username} email={user_data.email} role={getattr(user_data, 'role', None)}")
+
+    existing = users_collection.find_one({"$or": [{"username": user_data.username}, {"email": user_data.email}]})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username or email already exists")
+
+    createdAt = datetime.utcnow()
+    password_safe = user_data.password[:72] if len(user_data.password) > 72 else user_data.password
+    hashed_password = pwd_context.hash(password_safe)
+
+    user_doc: dict[str, Any] = {
+        "name": user_data.name,
+        "email": user_data.email,
+        "username": user_data.username,
+        "password": hashed_password,
+        "role": user_data.role,
+        "createdAt": createdAt,
+        "searchCount": int(user_data.searchCount or 0),
+    }
+
+
+    result = users_collection.insert_one(user_doc)
+
+    return {
+        "id": str(result.inserted_id),
+        "name": user_data.name,
+        "email": user_data.email,
+        "username": user_data.username,
+        "dateJoined": createdAt.date().isoformat(),
+        "searchCount": int(user_data.searchCount or 0),
+        "role": user_data.role,
+    }
+
+
+@app.put("/api/admin/users/{user_id}")
+async def api_admin_update_user(user_id: str = Path(...), user_data: AdminUserUpdate = ...):
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    update_fields: dict[str, Any] = {}
+    if user_data.name is not None:
+        update_fields["name"] = user_data.name
+    if user_data.email is not None:
+        update_fields["email"] = user_data.email
+    if user_data.username is not None:
+        update_fields["username"] = user_data.username
+    if user_data.searchCount is not None:
+        update_fields["searchCount"] = int(user_data.searchCount)
+
+    # dateJoined is derived from createdAt in this app; ignore if provided.
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    res = users_collection.update_one({"_id": oid}, {"$set": update_fields})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    updated = users_collection.find_one({"_id": oid})
+    created_at = updated.get("createdAt") or updated.get("created_at")
+    created_str = created_at.date().isoformat() if isinstance(created_at, datetime) else str(created_at) if created_at else ""
+
+    return {
+        "id": str(updated.get("_id")),
+        "name": updated.get("name", ""),
+        "email": updated.get("email", ""),
+        "username": updated.get("username", ""),
+        "dateJoined": created_str,
+        "searchCount": int(updated.get("searchCount", 0) or 0),
+    }
+
+@app.delete("/api/admin/users/{user_id}")
+async def api_admin_delete_user(user_id: str = Path(...)):
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    res = users_collection.delete_one({"_id": oid})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"success": True}
 
 
 @app.get("/api/admin/logs")

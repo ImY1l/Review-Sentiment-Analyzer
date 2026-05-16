@@ -216,12 +216,23 @@ export async function getUsers(): Promise<User[]> {
  * Add new user
  * FastAPI endpoint: POST /api/admin/users
  */
-export async function addUser(user: Omit<User, 'id'>): Promise<User> {
+export type AdminAddUserRequest = {
+  name: string;
+  email: string;
+  username: string;
+  password: string;
+  role: 'user' | 'admin';
+  dateJoined?: string;
+  searchCount?: number;
+};
+
+export async function addUser(user: AdminAddUserRequest): Promise<User> {
   return apiRequest<User>('/api/admin/users', {
     method: 'POST',
     body: JSON.stringify(user),
   });
 }
+
 
 /**
  * Update user

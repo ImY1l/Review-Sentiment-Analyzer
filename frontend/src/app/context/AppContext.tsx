@@ -23,7 +23,7 @@ interface AppContextType {
   currentProductId: string | null;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (data: { name: string; email: string; username: string; password: string }) => Promise<boolean>;
+  register: (data: { name: string; email: string; username: string; password: string }) => Promise<{ success: boolean; message?: string }>;
   toggleTheme: () => void;
   addSearchHistory: (query: string, category: string, platforms: string[]) => void;
   setCategory: (category: string) => void;
@@ -100,9 +100,9 @@ const [currentCategory, setCurrentCategory] = useState<string | null>(null);
     setSearchHistory([]);
   };
 
-  const register = async (data: { name: string; email: string; username: string; password: string }): Promise<boolean> => {
+  const register = async (data: { name: string; email: string; username: string; password: string }): Promise<{ success: boolean; message?: string }> => {
     const url = 'http://localhost:8000/api/auth/register';
-    
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -116,16 +116,23 @@ const [currentCategory, setCurrentCategory] = useState<string | null>(null);
 
       clearTimeout(timeoutId);
 
+      const result = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.status}`);
+        // backend returns {success:false, message: "..."} in many cases
+        return {
+          success: false,
+          message: result?.message || `HTTP ${response.status}`,
+        };
       }
 
-      const result = await response.json();
-      return result.success;
-    } catch (error) {
+      return {
+        success: Boolean(result?.success),
+        message: result?.message,
+      };
+    } catch (error: any) {
       console.error('Registration failed:', error);
-      return false;
+      return { success: false, message: error?.message || 'Registration failed' };
     }
   };
 

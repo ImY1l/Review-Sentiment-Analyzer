@@ -52,17 +52,17 @@ export function RegisterPage() {
       return;
     }
 
-    const success = await register({
+    const result = await register({
       name: formData.name,
       email: formData.email,
       username: formData.username,
       password: formData.password
     });
 
-    if (success) {
+    if (result.success) {
       navigate('/login');
     } else {
-      setError('Username already exists');
+      setError(result.message || 'Registration failed');
     }
   };
 

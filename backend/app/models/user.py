@@ -6,10 +6,9 @@ class UserBase(BaseModel):
   name: str
   email: EmailStr
   username: str
-  password: str
 
 class UserCreate(UserBase):
-  pass
+  password: str
 
 class User(UserBase):
   id: str
@@ -18,3 +17,4 @@ class User(UserBase):
 
   class Config:
     from_attributes = True
+
