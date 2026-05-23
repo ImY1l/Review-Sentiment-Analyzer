@@ -5,7 +5,7 @@
  * Example: http://localhost:8000 or https://your-backend.com
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
 
 // Helper function for making API requests
 async function apiRequest<T>(
@@ -297,6 +297,20 @@ export async function checkSourceStatus(sourceId: string): Promise<ReviewSource>
   return apiRequest<ReviewSource>(`/api/admin/sources/${sourceId}/check`, {
     method: 'POST',
   });
+}
+
+export interface SerpApiUsage {
+  remaining: number;
+  total?: number;
+  display?: string; // optional: backend may return remaining-only
+}
+
+/**
+ * Get shared SerpApi usage from backend
+ * FastAPI endpoint: GET /api/serpapi-usage
+ */
+export async function getSerpApiUsage(): Promise<SerpApiUsage> {
+  return apiRequest<SerpApiUsage>('/api/serpapi-usage');
 }
 
 // ============================================================================

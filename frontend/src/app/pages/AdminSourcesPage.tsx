@@ -1,24 +1,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Users, Database, Settings, AlertTriangle, CheckCircle } from 'lucide-react';
-import { checkSourceStatus, getSources, ReviewSource, updateSource } from '../services/api';
+import { Brain, Users, Database, AlertTriangle, CheckCircle } from 'lucide-react';
+import { checkSourceStatus, getSerpApiUsage, getSources, ReviewSource, updateSource } from '../services/api';
 
 export function AdminSourcesPage() {
+  const SERPAPI_PLATFORMS = useMemo(() => new Set(['amazon', 'google', 'tripadvisor', 'yelp']), []);
+  const SERPAPI_MONTHLY_LIMIT_FALLBACK = 250;
+
   const navigate = useNavigate();
   const [sources, setSources] = useState<ReviewSource[]>([]);
-  const [editingSource, setEditingSource] = useState<string | null>(null);
-  const [configData, setConfigData] = useState({
-    apiLimit: 0,
-    url: ''
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [serpUsage, setSerpUsage] = useState<{ remaining: number } | null>(null);
 
   useEffect(() => {
     async function fetchSources() {
       try {
         setLoading(true);
         setError('');
+
+        try {
+          const usage = await getSerpApiUsage();
+          setSerpUsage({ remaining: usage.remaining ?? 0 });
+        } catch (e) {
+          console.error('Failed to fetch SerpApi usage:', e);
+          setSerpUsage(null);
+        }
+
         const data = await getSources();
         setSources(data);
       } catch (e) {
@@ -32,15 +40,7 @@ export function AdminSourcesPage() {
     fetchSources();
   }, []);
 
-  const selectedSource = useMemo(
-    () => sources.find((s) => s.id === editingSource) || null,
-    [sources, editingSource]
-  );
-
-  useEffect(() => {
-    if (!selectedSource) return;
-    setConfigData({ apiLimit: selectedSource.apiLimit, url: selectedSource.url });
-  }, [selectedSource]);
+  const sortedSources = useMemo(() => sources, [sources]);
 
   const toggleStatus = async (sourceId: string) => {
     const current = sources.find((s) => s.id === sourceId);
@@ -53,23 +53,6 @@ export function AdminSourcesPage() {
       setSources((prev) => prev.map((s) => (s.id === sourceId ? updated : s)));
     } catch (e) {
       console.error('Failed to toggle source status:', e);
-    }
-  };
-
-  const handleEditConfig = (source: ReviewSource) => {
-    setEditingSource(source.id);
-  };
-
-  const handleSaveConfig = async (sourceId: string) => {
-    try {
-      const updated = await updateSource(sourceId, {
-        apiLimit: configData.apiLimit,
-        url: configData.url,
-      });
-      setSources((prev) => prev.map((s) => (s.id === sourceId ? updated : s)));
-      setEditingSource(null);
-    } catch (e) {
-      console.error('Failed to save source config:', e);
     }
   };
 
@@ -163,61 +146,15 @@ export function AdminSourcesPage() {
                 <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                    {source.name}
+                    {source.name
+                      ? source.name.charAt(0).toUpperCase() + source.name.slice(1)
+                      : ''}
                   </h3>
                   {getStatusBadge(source.status)}
                 </div>
-                <button
-                  onClick={() => handleEditConfig(source)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  title="Configure"
-                >
-                  <Settings className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                </button>
               </div>
 
-              {/* Configuration Form (if editing) */}
-              {editingSource === source.id ? (
-                <div className="space-y-3 mb-4">
-                  <div>
-                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                      API Endpoint
-                    </label>
-                    <input
-                      type="text"
-                      value={configData.url}
-                      onChange={(e) => setConfigData({ ...configData, url: e.target.value })}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                      API Limit
-                    </label>
-                    <input
-                      type="number"
-                      value={configData.apiLimit}
-                      onChange={(e) => setConfigData({ ...configData, apiLimit: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSaveConfig(source.id)}
-                      className="flex-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setEditingSource(null)}
-                      className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
+              <>
                   {/* Info */}
                   <div className="space-y-3 mb-4">
                     <div>
@@ -230,9 +167,26 @@ export function AdminSourcesPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">API Usage</p>
-                        <p className={`text-sm font-semibold ${getUsageColor(source.apiUsed, source.apiLimit)}`}>
-                          {source.apiUsed} / {source.apiLimit}
-                        </p>
+                        {SERPAPI_PLATFORMS.has(source.name.toLowerCase()) ? (
+                          (() => {
+                            const remaining = serpUsage?.remaining ?? 0;
+                            const used = Math.max(SERPAPI_MONTHLY_LIMIT_FALLBACK - remaining, 0);
+                            const ratioColor = getUsageColor(used, SERPAPI_MONTHLY_LIMIT_FALLBACK);
+                            return (
+                              <p className={`text-sm font-semibold ${ratioColor}`}>
+                                {serpUsage ? `${used}/${SERPAPI_MONTHLY_LIMIT_FALLBACK}` : 'Loading...'}
+                              </p>
+                            );
+                          })()
+                        ) : source.name.toLowerCase() === 'lazada' || source.name.toLowerCase() === 'shopee' ? (
+                          <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                            ∞ / ∞
+                          </p>
+                        ) : (
+                          <p className={`text-sm font-semibold ${getUsageColor(source.apiUsed, source.apiLimit)}`}>
+                            {source.apiUsed} / {source.apiLimit}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Response</p>
@@ -251,23 +205,61 @@ export function AdminSourcesPage() {
 
                     {/* Usage Bar */}
                     <div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${
-                            (source.apiUsed / source.apiLimit) >= 0.9 ? 'bg-red-500' :
-                            (source.apiUsed / source.apiLimit) >= 0.7 ? 'bg-yellow-500' :
-                            'bg-green-500'
-                          }`}
-                          style={{ width: `${(source.apiUsed / source.apiLimit) * 100}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {Math.round((source.apiUsed / source.apiLimit) * 100)}% used
-                      </p>
+                      {SERPAPI_PLATFORMS.has(source.name.toLowerCase()) ? (
+                        <>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${
+                                  (() => {
+                                    const used = Math.max(SERPAPI_MONTHLY_LIMIT_FALLBACK - (serpUsage?.remaining ?? 0), 0);
+                                    const ratio = used / SERPAPI_MONTHLY_LIMIT_FALLBACK;
+                                    if (ratio >= 0.9) return 'bg-red-500';
+                                    if (ratio >= 0.7) return 'bg-yellow-500';
+                                    return 'bg-green-500';
+                                  })()
+                                }`}
+                                style={{
+                                  width: serpUsage
+                                    ? `${(Math.max(SERPAPI_MONTHLY_LIMIT_FALLBACK - (serpUsage?.remaining ?? 0), 0) / SERPAPI_MONTHLY_LIMIT_FALLBACK) * 100}%`
+                                    : '0%',
+                                }}
+                              />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {serpUsage
+                              ? `${Math.round((serpUsage.remaining / SERPAPI_MONTHLY_LIMIT_FALLBACK) * 100)}% remaining`
+                              : 'Loading...'}
+                          </p>
+                        </>
+                      ) : source.name.toLowerCase() === 'lazada' || source.name.toLowerCase() === 'shopee' ? (
+                        <>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div className="h-2 rounded-full transition-all bg-green-500" style={{ width: '100%' }} />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            ∞ remaining
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                (source.apiUsed / source.apiLimit) >= 0.9 ? 'bg-red-500' :
+                                (source.apiUsed / source.apiLimit) >= 0.7 ? 'bg-yellow-500' :
+                                'bg-green-500'
+                              }`}
+                              style={{ width: `${(source.apiUsed / source.apiLimit) * 100}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {Math.round((source.apiUsed / source.apiLimit) * 100)}% used
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
-                </>
-              )}
+              </>
 
               {/* Toggle Button + Check */}
               <div className="flex gap-2">

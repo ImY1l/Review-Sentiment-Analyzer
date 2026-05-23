@@ -4,6 +4,7 @@ try:
 except ImportError:
     pass
 import os
+import httpx
 from fastapi import FastAPI, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -24,7 +25,6 @@ from app.database import (
 )
 
 LEVELS = {"info", "warning", "error", "success"}
-
 
 def record_log(*, level: str, action: str, details: str, user: str | None = None):
     if level not in LEVELS:
@@ -635,8 +635,47 @@ def _format_source(doc: dict) -> dict:
 
 @app.get("/api/admin/sources")
 async def api_admin_sources():
-    # Primary: review_platforms collection
-    sources = []
+    """
+    Returns all known review sources.
+    If Mongo doesn't have a platform document yet, upsert a default one so the UI always shows all 6 platforms.
+    """
+    defaults_by_name: dict[str, dict] = {
+        # SerpApi-limited (shared usage)
+        "amazon": {"name": "amazon", "url": "serpapi://amazon", "status": "available", "apiLimit": 250, "apiUsed": 0, "avgResponseTime": "N/A"},
+        "google": {"name": "google", "url": "serpapi://google", "status": "available", "apiLimit": 250, "apiUsed": 0, "avgResponseTime": "N/A"},
+        "tripadvisor": {"name": "tripadvisor", "url": "serpapi://tripadvisor", "status": "available", "apiLimit": 250, "apiUsed": 0, "avgResponseTime": "N/A"},
+        "yelp": {"name": "yelp", "url": "serpapi://yelp", "status": "available", "apiLimit": 250, "apiUsed": 0, "avgResponseTime": "N/A"},
+        # Unlimited
+        "lazada": {"name": "lazada", "url": "lazada://", "status": "available", "apiLimit": 0, "apiUsed": 0, "avgResponseTime": "N/A"},
+        "shopee": {"name": "shopee", "url": "shopee://", "status": "available", "apiLimit": 0, "apiUsed": 0, "avgResponseTime": "N/A"},
+    }
+
+    # Upsert defaults into review_platforms so UI always renders all 6.
+    # We upsert by `name` (not _id) because existing docs are likely keyed by name.
+    try:
+        for name, d in defaults_by_name.items():
+            existing = platforms_collection.find_one({"name": name})
+            if existing is None:
+                platforms_collection.update_one(
+                    {"name": name},
+                    {
+                        "$setOnInsert": {
+                            "name": d["name"],
+                            "url": d["url"],
+                            "status": d["status"],
+                            "apiLimit": int(d["apiLimit"]),
+                            "apiUsed": int(d["apiUsed"]),
+                            "avgResponseTime": d["avgResponseTime"],
+                            "lastChecked": "",
+                        }
+                    },
+                    upsert=True,
+                )
+    except Exception:
+        # If seeding fails, we'll fall back to whatever exists.
+        pass
+
+    sources: list[dict] = []
     try:
         cursor = platforms_collection.find({})
         for doc in cursor:
@@ -653,7 +692,29 @@ async def api_admin_sources():
         except Exception:
             sources = []
 
-    return sources
+    # Ensure we return at least defaults in stable order.
+    # This also helps if the collection seed/upsert partially failed.
+    existing_by_name = {s.get("name", "").lower(): s for s in sources if s.get("name")}
+    ordered = []
+    for key in ["amazon", "google", "tripadvisor", "yelp", "lazada", "shopee"]:
+        if existing_by_name.get(key):
+            ordered.append(existing_by_name[key])
+        else:
+            # Construct a formatted default (no _id)
+            ordered.append(
+                {
+                    "id": "",
+                    "name": defaults_by_name[key]["name"],
+                    "url": defaults_by_name[key]["url"],
+                    "status": defaults_by_name[key]["status"],
+                    "lastChecked": "",
+                    "apiLimit": int(defaults_by_name[key]["apiLimit"]),
+                    "apiUsed": int(defaults_by_name[key]["apiUsed"]),
+                    "avgResponseTime": str(defaults_by_name[key]["avgResponseTime"]),
+                }
+            )
+
+    return ordered
 
 
 @app.put("/api/admin/sources/{source_id}")
@@ -693,6 +754,61 @@ async def api_admin_update_source(source_id: str, update: AdminSourceUpdate):
         raise HTTPException(status_code=404, detail="Source not found")
 
     return _format_source(updated)
+
+
+@app.get("/api/serpapi-usage")
+async def serpapi_usage():
+    """Fetch shared SerpApi monthly usage from SerpApi account.json."""
+    SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+    if not SERPAPI_KEY:
+        raise HTTPException(status_code=500, detail="SERPAPI_KEY not configured")
+
+    url = "https://serpapi.com/account.json"
+    params = {"api_key": SERPAPI_KEY}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(url, params=params)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=str(detail))
+
+    data = response.json() or {}
+
+    left = int(data.get("plan_searches_left", 0) or 0)
+    total_plan = int(data.get("plan_searches", 0) or 0)
+    used_direct = data.get("plan_searches_used", None)
+    used_direct_int = int(used_direct) if used_direct is not None else None
+
+    # Prefer `plan_searches_used` when available (most reliable across SerpApi responses)
+    if used_direct_int is not None:
+        used = max(used_direct_int, 0)
+        if total_plan <= 0:
+            total_plan = used + left
+    else:
+        # Otherwise derive used from total - left if total is present
+        if total_plan > 0:
+            used = max(total_plan - left, 0)
+        else:
+            used = 0
+            total_plan = left  # best-effort: avoids 0/0
+
+    # Final guard: avoid invalid totals
+    if total_plan <= 0:
+        total_plan = used + left
+
+    return {
+        "remaining": left,
+        "total": total_plan,
+        "display": f"{used}/{total_plan}",
+        "used": used,
+    }
+
+
+
 
 
 @app.post("/api/admin/sources/{source_id}/check")
