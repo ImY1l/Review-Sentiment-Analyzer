@@ -1,43 +1,79 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Search, Brain, ArrowLeft, Tag } from 'lucide-react';
-import { unifiedSearch } from '../services/api';
+import { unifiedSearch, getSources } from '../services/api';
 
 const PLATFORMS = [
   { id: 'lazada', name: 'Lazada', category: 'ecommerce' },
   { id: 'shopee', name: 'Shopee', category: 'ecommerce' },
   { id: 'amazon', name: 'Amazon', category: 'ecommerce' },
-  { id: 'google_maps', name: 'Google Maps', category: 'locations',  google_type: 'maps'},
+  { id: 'google_maps', name: 'Google Maps', category: 'locations', google_type: 'maps' },
   { id: 'yelp', name: 'Yelp', category: 'food' },
   { id: 'tripadvisor', name: 'Tripadvisor', category: 'food' },
 ];
 
-
-
 const CATEGORY_NAMES: Record<string, string> = {
-  'ecommerce': 'E-commerce',
-  'food': 'Food & dining',
-  'locations': 'Locations',
+  ecommerce: 'E-commerce',
+  food: 'Food & dining',
+  locations: 'Locations',
 };
-
 
 export function UserSearchPage() {
   const navigate = useNavigate();
   const { user, searchHistory, addSearchHistory, currentCategory, setCurrentProductId } = useApp();
+
   const [query, setQuery] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
 
   const [error, setError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
+  const [platformAvailability, setPlatformAvailability] = useState<
+    Record<string, 'available' | 'unavailable'>
+  >({});
+  const [sourcesLoading, setSourcesLoading] = useState(true);
+
   const platformMap: Record<string, string[]> = {
-  'ecommerce': ['shopee', 'lazada', 'amazon'],
-    'food': ['yelp', 'tripadvisor', 'google_maps'],
-    'locations': ['google_maps', 'yelp', 'tripadvisor']
+    ecommerce: ['shopee', 'lazada', 'amazon'],
+    food: ['yelp', 'tripadvisor', 'google_maps'],
+    locations: ['google_maps', 'yelp', 'tripadvisor'],
   };
+
   const categoryPlatforms = platformMap[currentCategory || 'ecommerce'] || [];
 
+  // Load platform availability status (from admin sources)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStatuses() {
+      try {
+        setSourcesLoading(true);
+        const data = await getSources();
+        if (cancelled) return;
+
+        const availabilityMap: Record<string, 'available' | 'unavailable'> = {};
+        for (const s of data) {
+          availabilityMap[s.name.toLowerCase()] = s.status;
+        }
+
+        setPlatformAvailability(availabilityMap);
+
+        // Drop any selected platforms that became unavailable.
+        setSelectedPlatforms((prev) => prev.filter((p) => availabilityMap[p.toLowerCase()] !== 'unavailable'));
+      } catch (e) {
+        console.error('Failed to load platform statuses:', e);
+      } finally {
+        if (!cancelled) setSourcesLoading(false);
+      }
+    }
+
+    loadStatuses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Redirect to category selection if no category is selected
   useEffect(() => {
@@ -51,10 +87,12 @@ export function UserSearchPage() {
   }
 
   const handlePlatformToggle = (platformId: string) => {
-    setSelectedPlatforms(prev => 
-      prev.includes(platformId) 
-        ? prev.filter(id => id !== platformId)
-        : [...prev, platformId]
+    const availability = platformAvailability[platformId];
+
+    if (availability && availability !== 'available') return;
+
+    setSelectedPlatforms((prev) =>
+      prev.includes(platformId) ? prev.filter((id) => id !== platformId) : [...prev, platformId]
     );
   };
 
@@ -84,34 +122,17 @@ export function UserSearchPage() {
     try {
       const userId = user?.username || 'anonymous';
 
+      // Filter platforms: category + available only
+      const selectedSupported = selectedPlatforms.filter(
+        (p) => categoryPlatforms.includes(p) && platformAvailability[p.toLowerCase()] !== 'unavailable'
+      );
 
+      if (selectedSupported.length === 0) {
+        throw new Error(`No available platforms for ${CATEGORY_NAMES[currentCategory] || currentCategory}`);
+      }
 
-// Filter platforms STRICTLY by category
-const platformMap: Record<string, string[]> = {
-  'ecommerce': ['shopee', 'lazada', 'amazon'],
-  'food': ['yelp', 'tripadvisor', 'google_maps'],
-  'locations': ['google_maps', 'yelp', 'tripadvisor']
-};
-const categoryPlatforms: string[] = platformMap[currentCategory || 'ecommerce'] || [];
+      const supportedPlatforms = selectedSupported;
 
-
-
-
-
-const selectedSupported = selectedPlatforms.filter(p => categoryPlatforms.includes(p));
-
-
-if (selectedSupported.length === 0) {
-  throw new Error(`No platforms available for ${CATEGORY_NAMES[currentCategory] || currentCategory}`);
-}
-
-const supportedPlatforms = selectedSupported;
-
-
-
-      console.log('Starting unified search for:', query, 'on platforms:', supportedPlatforms);
-
-      // Unified search: scrape + analyze in one call
       const result = await unifiedSearch({
         query: query.trim(),
         user_id: userId,
@@ -122,15 +143,16 @@ const supportedPlatforms = selectedSupported;
         throw new Error(result.message || 'Search failed - no product found');
       }
 
-      console.log('Unified search result:', result);
-
       // Set context and history
       setCurrentProductId(result.product_id);
       addSearchHistory(query, currentCategory || 'general', supportedPlatforms);
 
       // Navigate to results
-      navigate(`/results?productId=${result.product_id}&platforms=${supportedPlatforms.join(',')}&query=${encodeURIComponent(query.trim())}`);
-
+      navigate(
+        `/results?productId=${result.product_id}&platforms=${supportedPlatforms.join(',')}&query=${encodeURIComponent(
+          query.trim()
+        )}`
+      );
     } catch (err: any) {
       console.error('Search failed:', err);
       setError(err.message || 'Search failed. Please try again.');
@@ -139,11 +161,9 @@ const supportedPlatforms = selectedSupported;
     }
   };
 
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-950">
       <div className="flex flex-col min-h-screen relative">
-
         {/* Loading Overlay */}
         {isSearching && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -154,23 +174,25 @@ const supportedPlatforms = selectedSupported;
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Analyzing Reviews</h3>
 
               <p className="text-gray-600 dark:text-gray-400 mb-2">
-                Scraping from: <span className="font-semibold text-purple-600 dark:text-purple-400">
-                  {selectedPlatforms.map(id => {
-                    const p = PLATFORMS.find(platform => platform.id === id);
-                    return p ? p.name : id;
-                  }).join(', ')}
+                Scraping from:{' '}
+                <span className="font-semibold text-purple-600 dark:text-purple-400">
+                  {selectedPlatforms
+                    .map((id) => {
+                      const p = PLATFORMS.find((platform) => platform.id === id);
+                      return p ? p.name : id;
+                    })
+                    .join(', ')}
                 </span>
               </p>
               <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">This may take 2-5 minutes</p>
               <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}} />
-                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}} />
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
               </div>
             </div>
           </div>
         )}
-
 
         {/* Main Content */}
         <div className={`flex-1 p-6 lg:p-12 ${isSearching ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -185,12 +207,8 @@ const supportedPlatforms = selectedSupported;
                   Review Sentiment Analyzer
                 </h1>
               </div>
-              <p className="text-xl text-gray-700 dark:text-gray-300">
-                Welcome, {user?.name || user?.username}!
-              </p>
-              <p className="text-gray-600 dark:text-gray-400 mt-2">
-                Search for any product to analyze reviews from across the internet
-              </p>
+              <p className="text-xl text-gray-700 dark:text-gray-300">Welcome, {user?.name || user?.username}!</p>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">Search for any product to analyze reviews from across the internet</p>
             </div>
 
             {/* Search Bar */}
@@ -242,17 +260,17 @@ const supportedPlatforms = selectedSupported;
                 </div>
               </div>
 
-
               {/* Platform Selection */}
               <div>
-                <label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
-                  Select review platforms
-                </label>
+                <label className="block text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">Select review platforms</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {categoryPlatforms.map((platformId: string) => {
-                    const platform = PLATFORMS.find(p => p.id === platformId);
+                  {categoryPlatforms.map((platformId) => {
+                    const platform = PLATFORMS.find((p) => p.id === platformId);
                     if (!platform) return null;
-                    
+
+                    const availability = platformAvailability[platform.id];
+                    const disabled = availability === 'unavailable' || sourcesLoading;
+
                     return (
                       <label
                         key={platform.id}
@@ -262,19 +280,15 @@ const supportedPlatforms = selectedSupported;
                           type="checkbox"
                           checked={selectedPlatforms.includes(platform.id)}
                           onChange={() => handlePlatformToggle(platform.id)}
-                          className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          disabled={disabled}
+                          className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-50"
                         />
-                        <span className="text-gray-900 dark:text-white font-medium">{platform.name}</span>
+                        <span className={`font-medium ${disabled ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>{platform.name}</span>
                       </label>
                     );
                   })}
-
-
                 </div>
-
               </div>
-
-
 
               {/* Error Message */}
               {error && (
@@ -308,3 +322,4 @@ const supportedPlatforms = selectedSupported;
     </div>
   );
 }
+
