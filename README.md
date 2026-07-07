@@ -130,5 +130,3 @@ For technical inquiries, validation reviews, or questions regarding this reposit
 <div align="center">
   <sub>Built with ❤️ for FYP02-SE-T2610-0503 | Multimedia University 2026</sub>
 </div>
-
-[![](https://visitcount.itsvg.in/api?id=IMy1l.&icon=0&color=0)](https://visitcount.itsvg.in)
