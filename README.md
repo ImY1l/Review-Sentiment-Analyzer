@@ -89,7 +89,7 @@ For a deep dive into the formal academic deliverables, system validation, and co
 
 ---
 
-## 📄 License
+## ⚖️ License
 
 © 2026 Mohammed Yousef Mohammed Abdulkarem. All Rights Reserved.
 
