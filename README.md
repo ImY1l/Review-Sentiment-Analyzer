@@ -5,7 +5,7 @@ This project aims to assist both consumers and businesses by providing sentiment
 
 ---
 
-## 🚀 Features
+## ✨ Features
 - **Multi-Platform Collection:** Automated dynamic data ingestion from e-commerce and service channels (Lazada, Amazon, Yelp) via headless browser scraping.
 - **AI-Powered Analysis:** Linguistic evaluation extracting overall sentiment polarity (Positive, Negative, Neutral).
 - **Aspect Clustering:** Automated semantic extraction and side-by-side classification of explicit "Pros" and "Cons" arrays.
@@ -18,7 +18,7 @@ This project aims to assist both consumers and businesses by providing sentiment
 ## 📐 System Architecture
 The platform is built upon a decoupled layered architecture using an asynchronous FastAPI runtime backend layer, an interactive React frontend layer, and a structured NoSQL database layer.
 
-![System Architecture](System_Architecture.png)
+![System Architecture](/assets/System_Architecture.png)
 
 ---
 
