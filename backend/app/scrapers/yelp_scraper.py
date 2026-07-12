@@ -1,4 +1,3 @@
-# app/scrapers/yelp_scraper.py
 from app.database import reviews_collection, products_collection
 from datetime import datetime
 import uuid

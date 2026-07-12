@@ -46,7 +46,7 @@ async def _get_serp_data(client: httpx.AsyncClient, params: dict):
 async def scrape_google_maps_reviews(
     query: str,
     user_id: str,
-    max_pages: int = 5
+    max_pages: int = 10
 ) -> dict:
     """
     Scrape Google Maps reviews using SerpApi.
@@ -233,7 +233,7 @@ async def scrape_google(
     query: str,
     user_id: str,
     category: str = "location",
-    max_pages: int = 5
+    max_pages: int = 10
 ):
     """
     Unified Google scraper.

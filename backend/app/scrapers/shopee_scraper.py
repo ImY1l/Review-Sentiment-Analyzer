@@ -1,5 +1,4 @@
-# app/scrapers/shopee_scraper.py
-
+# NOT Finished yet - Can't get past the anti-automation mechanism
 from playwright.async_api import async_playwright
 from app.database import reviews_collection, products_collection
 from datetime import datetime
